@@ -378,7 +378,7 @@
    Même logique que "Pulso pour Richard" : 1 fichier, localStorage, backup JSON
    ===================================================================== */
 const KEY="finances_perso_v1";
-const APP_VERSION="1.7";
+const APP_VERSION="1.8";
 const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
 const MOIS=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
 const JOURS=["dim","lun","mar","mer","jeu","ven","sam"];
@@ -871,8 +871,8 @@ function wireCatPick(sb,wrapId){
 }
 function formTx(existing,presetType){
   const isEdit=!!existing;
-  draft=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),type:presetType||"depense",date:todayYmd(),montant:"",cur:"EUR",categorie:"",note:"",_rec:false};
-  if(!draft.cur)draft.cur="EUR";
+  draft=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),type:presetType||"depense",date:todayYmd(),montant:"",cur:"BRL",categorie:"",note:"",_rec:false};
+  if(!draft.cur)draft.cur="BRL";
   if(!draft.categorie){const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"";}
   const advOpen=isEdit&&((draft.qte&&Number(draft.qte)!==1)||(draft.montants&&draft.montants.length));
   const body=`
@@ -1009,8 +1009,8 @@ function openRecurrences(){
 }
 function formRecurrence(existing){
   const isEdit=!!existing;
-  draft=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),type:"depense",montant:"",cur:"EUR",categorie:"",note:"",jour:1,actif:true,desde:ymNow()};
-  if(!draft.cur)draft.cur="EUR";
+  draft=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),type:"depense",montant:"",cur:"BRL",categorie:"",note:"",jour:1,actif:true,desde:ymNow()};
+  if(!draft.cur)draft.cur="BRL";
   if(!draft.categorie){const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"";}
   const body=`
     <div class="fld"><label>Type</label>
