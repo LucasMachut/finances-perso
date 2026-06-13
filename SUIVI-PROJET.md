@@ -37,6 +37,7 @@
 - **Tous les montants affichés en € ET R$.** Plus aucun montant en une seule devise : héro, marges, jauge, totaux jour par jour, catégories (accueil + analyse), objectifs, récurrentes, net récurrent, info-bulles des graphes… tout passe par `dualEUR`/`signedDualEUR`. La récurrente affiche aussi son équivalent (`≈`).
 - **Création express de catégorie depuis la saisie.** Bouton « ＋ Catégorie » directement dans le sélecteur de catégories (dépense, revenu et récurrente) : on tape le nom, la catégorie est créée et sélectionnée sans quitter le formulaire (icône/couleur par défaut, modifiables ensuite dans « Gérer les catégories »).
 - **Multiplication d'une dépense.** Champ « Montant unitaire » × « Quantité » avec **total calculé en direct dans les deux devises** (ex : ticket de métro × nombre de trajets). Le détail `prix×qté` est rappelé sous le mouvement.
+- **Plusieurs montants d'un coup (différents).** Champ « Plusieurs montants » : on liste des montants séparés par un espace (ou `;` / `+`), ils s'**additionnent** au total (la virgule reste le séparateur décimal FR). Ex : tous les trajets/courses du mois en une saisie. Stocké dans `montants[]` (montant = somme, stats justes), nombre de montants rappelé sous le mouvement. Cumulable avec unitaire×qté.
 
 ## ❓ Questions pour Lucas (à répondre demain)
 

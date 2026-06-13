@@ -372,7 +372,7 @@
    Même logique que "Pulso pour Richard" : 1 fichier, localStorage, backup JSON
    ===================================================================== */
 const KEY="finances_perso_v1";
-const APP_VERSION="1.2";
+const APP_VERSION="1.3";
 const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
 const MOIS=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
 const JOURS=["dim","lun","mar","mer","jeu","ven","sam"];
@@ -656,7 +656,7 @@ function renderMouvements(){
         listHtml+=`<div class="tx-row" data-tx="${t.id}">
           <div class="tx-ico" style="background:${ct.cor}">${ct.icone}</div>
           <div class="tx-body"><div class="tx-nm">${esc(t.note||ct.nom)}</div>
-            <div class="tx-meta">${esc(ct.nom)}${t.recId?`<span class="tx-rec">↻ récurrent</span>`:""}${t.qte&&Number(t.qte)!==1?` · ${fmtCur(t.pu,t.cur)}×${t.qte}`:""} · ≈ ${conv}</div></div>
+            <div class="tx-meta">${esc(ct.nom)}${t.recId?`<span class="tx-rec">↻ récurrent</span>`:""}${t.qte&&Number(t.qte)!==1?` · ${fmtCur(t.pu,t.cur)}×${t.qte}`:""}${t.montants&&t.montants.length>1?` · ${t.montants.length} montants`:""} · ≈ ${conv}</div></div>
           <div class="tx-amt ${isRev?'in':'out'}">${isRev?"+":"−"}${fmtCur(t.montant,t.cur)}</div></div>`;
       });
     });
@@ -846,13 +846,14 @@ function formTx(existing,presetType){
         <button data-t="revenu" class="${draft.type==="revenu"?"on":""}">Revenu<small>entrée d'argent</small></button>
       </div></div>
     <div class="frow">
-      <div class="fld" style="flex:1.5"><label>Montant unitaire</label><input id="tMontant" inputmode="decimal" value="${draft.pu!=null?draft.pu:(draft.montant||"")}" placeholder="Ex : 49,90"></div>
+      <div class="fld" style="flex:1.5"><label>Montant unitaire</label><input id="tMontant" inputmode="decimal" value="${draft.pu?draft.pu:((draft.montants&&draft.montants.length)?'':(draft.montant||''))}" placeholder="Ex : 49,90"></div>
       <div class="fld" style="flex:1"><label>Devise</label><select id="tCur"><option value="EUR" ${draft.cur!=="BRL"?"selected":""}>€ Euro</option><option value="BRL" ${draft.cur==="BRL"?"selected":""}>R$ Réal</option></select></div>
     </div>
     <div class="frow">
       <div class="fld" style="flex:1"><label>× Quantité</label><input id="tQte" inputmode="decimal" value="${draft.qte&&Number(draft.qte)!==1?draft.qte:""}" placeholder="1"></div>
       <div class="fld" style="flex:1.5"><label>Total</label><div class="total-box" id="tTotal">—</div></div>
     </div>
+    <div class="fld"><label>Plusieurs montants <span class="opt">(séparés par un espace — s'additionnent)</span></label><input id="tListe" inputmode="decimal" value="${(draft.montants&&draft.montants.length)?draft.montants.join(' '):''}" placeholder="Ex : 9,90  9,90  12  8,50"></div>
     <div class="fld"><label>Date</label><input type="date" id="tDate" value="${draft.date}"></div>
     <div class="fld"><label>Catégorie</label><div id="tCatWrap">${catPickHtml(draft.type)}</div></div>
     <div class="fld"><label>Note <span class="opt">(optionnel)</span></label><input id="tNote" value="${esc(draft.note||"")}" placeholder="Ex : Courses Carrefour"></div>
@@ -874,20 +875,23 @@ function formTx(existing,presetType){
   });
   sb.querySelectorAll("#tFreq [data-r]").forEach(b=>b.onclick=()=>{draft._rec=b.dataset.r==="1";sb.querySelectorAll("#tFreq [data-r]").forEach(x=>x.classList.toggle("on",x.dataset.r===b.dataset.r));});
   // total en direct (montant unitaire × quantité), dans les deux devises
-  const elPu=document.getElementById("tMontant"),elQte=document.getElementById("tQte"),elCur=document.getElementById("tCur"),elTot=document.getElementById("tTotal");
+  const elPu=document.getElementById("tMontant"),elQte=document.getElementById("tQte"),elCur=document.getElementById("tCur"),elTot=document.getElementById("tTotal"),elListe=document.getElementById("tListe");
   const numOf=el=>parseFloat(String(el.value).replace(",","."))||0;
+  // une liste de montants : séparés par espace / ; / + (la virgule reste le séparateur décimal FR)
+  const parseListe=str=>String(str||"").split(/[\s;+]+/).filter(Boolean).map(x=>parseFloat(x.replace(",","."))||0).filter(n=>n>0);
+  const calcTotal=()=>{const pu=numOf(elPu),qte=numOf(elQte)||1,liste=parseListe(elListe.value);const tot=Math.round((pu*qte+liste.reduce((a,b)=>a+b,0))*100)/100;return {tot,pu,qte,liste};};
   const refreshTotal=()=>{
-    const pu=numOf(elPu),qte=numOf(elQte)||1,tot=Math.round(pu*qte*100)/100;
-    if(!pu){elTot.textContent="—";return;}
+    const {tot,liste}=calcTotal();
+    if(!tot){elTot.textContent="—";return;}
     const cur=elCur.value==="BRL"?"BRL":"EUR";
-    const eur=toEUR(tot,cur),autre=cur==="BRL"?fmtCur(eur,"EUR"):fmtCur(eurToBrl(tot),"BRL");
-    elTot.textContent=fmtCur(tot,cur)+" · "+autre;
+    const autre=cur==="BRL"?fmtCur(toEUR(tot,cur),"EUR"):fmtCur(eurToBrl(tot),"BRL");
+    elTot.textContent=fmtCur(tot,cur)+" · "+autre+(liste.length>1?`  ·  ${liste.length} montants`:"");
   };
-  [elPu,elQte].forEach(el=>el.oninput=refreshTotal);elCur.onchange=refreshTotal;refreshTotal();
+  [elPu,elQte,elListe].forEach(el=>el.oninput=refreshTotal);elCur.onchange=refreshTotal;refreshTotal();
   document.getElementById("tSave").onclick=()=>{
-    const pu=numOf(elPu),qte=numOf(elQte)||1;
-    draft.montant=Math.round(pu*qte*100)/100;
-    draft.pu=pu;draft.qte=qte;
+    const {tot,pu,qte,liste}=calcTotal();
+    draft.montant=tot;
+    draft.pu=pu;draft.qte=qte;draft.montants=liste;
     draft.cur=document.getElementById("tCur").value==="BRL"?"BRL":"EUR";
     draft.date=document.getElementById("tDate").value;
     draft.note=document.getElementById("tNote").value.trim();
