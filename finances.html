@@ -173,6 +173,11 @@
   .cat-bar .cbtrack{height:8px;border-radius:99px;background:var(--surface-2);overflow:hidden}
   .cat-bar .cbtrack i{display:block;height:100%;border-radius:99px;transition:width .4s}
   .cat-pct{font-size:11px;color:var(--ink-faint);font-weight:700;flex-shrink:0;width:38px;text-align:right;font-variant-numeric:tabular-nums}
+  .cat-row[data-cat]{cursor:pointer}
+  .cat-row[data-cat]:active{opacity:.55}
+  .cat-row[data-cat]::after{content:"›";color:var(--ink-faint);font-weight:800;font-size:18px;line-height:1;margin-left:2px;flex-shrink:0}
+  .donut-leg .dl[data-cat]{cursor:pointer}
+  .donut-leg .dl[data-cat]:active{opacity:.55}
 
   /* ---------- Donut ---------- */
   .donut-wrap{display:flex;align-items:center;gap:16px;padding:18px 16px}
@@ -373,7 +378,7 @@
    Même logique que "Pulso pour Richard" : 1 fichier, localStorage, backup JSON
    ===================================================================== */
 const KEY="finances_perso_v1";
-const APP_VERSION="1.5";
+const APP_VERSION="1.6";
 const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
 const MOIS=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
 const JOURS=["dim","lun","mar","mer","jeu","ven","sam"];
@@ -632,6 +637,7 @@ function renderAccueil(){
     </div>`;
 
   el.querySelectorAll("[data-goal]").forEach(c=>c.onclick=()=>formObjectif(objs.find(o=>o.id===c.dataset.goal)));
+  el.querySelectorAll("[data-cat]").forEach(c=>c.onclick=()=>openCategorieDetail(c.dataset.cat,ymNow()));
   const go=document.getElementById("goObj");if(go)go.onclick=()=>{setTab("objectifs");render();};
   document.getElementById("goRec").onclick=openRecurrences;
 }
@@ -708,7 +714,7 @@ function renderAnalyse(){
   const segs=cats.map(c=>({value:c.v,color:cat(c.id).cor}));
   let donutHtml;
   if(cats.length){
-    const leg=cats.slice(0,6).map(c=>{const ct=cat(c.id);const pct=Math.round(c.v/s.depenses*100);return `<div class="dl"><i style="background:${ct.cor}"></i><span class="dln">${esc(ct.nom)}</span><span class="dlv">${pct}%</span></div>`;}).join("");
+    const leg=cats.slice(0,6).map(c=>{const ct=cat(c.id);const pct=Math.round(c.v/s.depenses*100);return `<div class="dl" data-cat="${c.id}"><i style="background:${ct.cor}"></i><span class="dln">${esc(ct.nom)}</span><span class="dlv">${pct}%</span></div>`;}).join("");
     donutHtml=`<div class="donut-wrap">
       <div class="donut-c">${donutSvg(segs)}<div class="donut-center"><div class="dc-v">${money0(s.depenses)}</div><div class="dc-l">dépenses</div><div style="font-size:11px;color:var(--ink-faint);font-weight:700;margin-top:2px">${fmtCur(eurToBrl(s.depenses),'BRL')}</div></div></div>
       <div class="donut-leg">${leg}</div></div>`;
@@ -717,7 +723,7 @@ function renderAnalyse(){
   // top catégories barres
   const maxCat=Math.max(1,...cats.map(c=>c.v));
   const catBars=cats.length?cats.map(c=>{const ct=cat(c.id);const pct=Math.round(c.v/s.depenses*100);return `
-    <div class="cat-row">
+    <div class="cat-row" data-cat="${c.id}">
       <div class="cat-ico" style="background:${ct.cor}">${ct.icone}</div>
       <div class="cat-bar"><div class="cbtop"><span class="cbn">${esc(ct.nom)}</span><span class="cbv">${dualEUR(c.v)}</span></div>
         <div class="cbtrack"><i style="width:${Math.round(c.v/maxCat*100)}%;background:${ct.cor}"></i></div></div>
@@ -759,6 +765,7 @@ function renderAnalyse(){
     </div>`;
   document.getElementById("mPrev").onclick=()=>{ui.finMonth=shiftMonth(ym,-1);render();};
   document.getElementById("mNext").onclick=()=>{ui.finMonth=shiftMonth(ym,1);render();};
+  el.querySelectorAll("[data-cat]").forEach(c=>c.onclick=()=>openCategorieDetail(c.dataset.cat,ym));
 }
 
 /* ---------- OBJECTIFS ---------- */
@@ -817,6 +824,30 @@ function openSheet(title,bodyHtml,footHtml){
   document.getElementById("sheet").classList.add("show");
 }
 function closeSheet(){document.getElementById("sheetBg").classList.remove("show");document.getElementById("sheet").classList.remove("show");}
+
+/* détail d'une catégorie pour un mois : liste des mouvements (éditables) + total */
+function openCategorieDetail(catId,ym){
+  const ct=cat(catId);
+  const list=txMois(ym).filter(t=>t.categorie===catId).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  const totEur=list.reduce((s,t)=>s+toEUR(t.montant,t.cur),0);
+  let body=`<div class="info-line"><span class="k">${esc(moisLabel(ym))}</span><span class="v" style="color:${ct.type==='revenu'?'var(--green)':'var(--red)'}">${ct.type==='revenu'?'+':'−'}${dualEUR(totEur)}</span></div>`;
+  if(!list.length){
+    body+=`<div class="empty" style="padding:30px"><div class="ico">${ct.icone}</div><h3>Rien ce mois-ci</h3><p>Aucun mouvement dans « ${esc(ct.nom)} ».</p></div>`;
+  }else{
+    body+=`<div class="hint" style="margin:4px 0 12px">${list.length} mouvement${list.length>1?"s":""} · touchez une ligne pour modifier</div>`;
+    body+=list.map(t=>{
+      const d=parseYmd(t.date);const isRev=t.type==="revenu";
+      const conv=t.cur==="BRL"?fmtCur(toEUR(t.montant,"BRL"),"EUR"):fmtCur(eurToBrl(t.montant),"BRL");
+      return `<div class="tx-row" data-tx="${t.id}">
+        <div class="tx-ico" style="background:${ct.cor}">${ct.icone}</div>
+        <div class="tx-body"><div class="tx-nm">${esc(t.note||ct.nom)}</div>
+          <div class="tx-meta">${d.getDate()} ${MOIS[d.getMonth()].slice(0,4)}${t.recId?" · ↻":""}${t.qte&&Number(t.qte)!==1?` · ${fmtCur(t.pu,t.cur)}×${t.qte}`:""}${t.montants&&t.montants.length>1?` · ${t.montants.length} montants`:""} · ≈ ${conv}</div></div>
+        <div class="tx-amt ${isRev?'in':'out'}">${isRev?"+":"−"}${fmtCur(t.montant,t.cur)}</div></div>`;
+    }).join("");
+  }
+  openSheet(ct.icone+" "+esc(ct.nom),body);
+  document.getElementById("sheetBody").querySelectorAll("[data-tx]").forEach(c=>c.onclick=()=>formTx(state.tx.find(t=>t.id===c.dataset.tx)));
+}
 
 function catPickHtml(type){
   const list=state.categories.filter(c=>c.type===type);
