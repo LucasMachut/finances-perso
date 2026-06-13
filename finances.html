@@ -318,6 +318,7 @@
   :root{color-scheme:dark}
   [data-theme="light"]{color-scheme:light}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 <div class="phone">
@@ -372,7 +373,7 @@
    Même logique que "Pulso pour Richard" : 1 fichier, localStorage, backup JSON
    ===================================================================== */
 const KEY="finances_perso_v1";
-const APP_VERSION="1.3";
+const APP_VERSION="1.4";
 const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
 const MOIS=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
 const JOURS=["dim","lun","mar","mer","jeu","ven","sam"];
@@ -1088,7 +1089,7 @@ function openMenu(){
     <div class="act blue" data-m="rec"><div class="ai">↻</div><div><div>Charges récurrentes</div><div class="sub">Loyer, salaire, abonnements</div></div></div>
     <div class="act amber" data-m="obj"><div class="ai">🎯</div><div><div>Nouvel objectif d'épargne</div></div></div>
     <div class="act grey" data-m="cats"><div class="ai">🏷️</div><div><div>Gérer les catégories</div></div></div>
-    <div class="act blue" data-m="cloud"><div class="ai">☁</div><div><div>Sauvegarde cloud (GitHub)</div><div class="sub">${syncEnabled()?"Activée · "+({synced:"synchronisé",syncing:"en cours",pending:"à envoyer",offline:"hors-ligne",error:"erreur"}[gh.status]||"active"):"Désactivée — recommandé"}</div></div></div>
+    <div class="act blue" data-m="cloud"><div class="ai">☁</div><div><div>Sauvegarde cloud</div><div class="sub">${syncEnabled()?"Connecté · "+({synced:"synchronisé",syncing:"en cours",pending:"à envoyer",offline:"hors-ligne",error:"erreur"}[sbStatus]||"actif"):(sb?"Se connecter (recommandé)":"Non configurée")}</div></div></div>
     <div class="act grey" data-m="export"><div class="ai">💾</div><div><div>Sauvegarder (JSON)</div><div class="sub">${lbTxt}</div></div></div>
     <div class="act grey" data-m="import"><div class="ai">📂</div><div><div>Restaurer une sauvegarde</div></div></div>
     <div class="act grey" data-m="csv"><div class="ai">📊</div><div><div>Exporter en CSV</div></div></div>
@@ -1129,107 +1130,102 @@ function handleImport(file){
 }
 
 /* =====================================================================
-   SYNCHRONISATION CLOUD — repo GitHub privé (data.json via API Contents)
-   Le jeton reste sur l'appareil (localStorage), jamais dans le code public.
+   SAUVEGARDE CLOUD — Supabase (connexion par email, sync auto multi-appareils)
+   La clé "anon" est publique par conception ; la sécurité vient de l'auth + RLS.
    ===================================================================== */
-let gh={token:"",owner:"LucasMachut",repo:"finances-data",path:"data.json",sha:null,status:"off"};
-try{gh.token=localStorage.getItem("finances_gh_token")||"";}catch(e){}
-try{const c=JSON.parse(localStorage.getItem("finances_gh_cfg")||"null");if(c)Object.assign(gh,{owner:c.owner||gh.owner,repo:c.repo||gh.repo,path:c.path||gh.path});}catch(e){}
-function syncEnabled(){return !!gh.token;}
-function saveGhCfg(){try{localStorage.setItem("finances_gh_token",gh.token||"");localStorage.setItem("finances_gh_cfg",JSON.stringify({owner:gh.owner,repo:gh.repo,path:gh.path}));}catch(e){}}
-/* base64 compatible UTF-8 (accents é, à, …) */
-function b64enc(str){return btoa(unescape(encodeURIComponent(str)));}
-function b64dec(b64){return decodeURIComponent(escape(atob(String(b64).replace(/\n/g,""))));}
+const SB_URL="";   /* ← à remplir : https://xxxxxxxx.supabase.co */
+const SB_ANON="";  /* ← à remplir : clé "anon public" du projet */
+let sb=null,sbUser=null,sbStatus="off";
+try{ if(SB_URL&&SB_ANON&&window.supabase){ sb=window.supabase.createClient(SB_URL,SB_ANON,{auth:{persistSession:true,autoRefreshToken:true,storageKey:"finances_sb_auth"}}); } }catch(e){}
+function syncEnabled(){return !!(sb&&sbUser);}
 function setSync(s){
-  gh.status=s;const b=document.getElementById("btnSync");if(!b)return;
-  const map={synced:["✓","var(--green)","Synchronisé"],syncing:["↻","var(--amber)","Synchronisation…"],pending:["•","var(--amber)","Modifications à envoyer"],offline:["⚠","var(--ink-faint)","Hors-ligne — réessai auto"],error:["⚠","var(--red)","Erreur de synchro — touchez"],off:["☁","var(--ink-faint)","Sauvegarde cloud désactivée"]};
+  sbStatus=s;const b=document.getElementById("btnSync");if(!b)return;
+  const map={synced:["✓","var(--green)","Synchronisé"],syncing:["↻","var(--amber)","Synchronisation…"],pending:["•","var(--amber)","Modifications à envoyer"],offline:["⚠","var(--ink-faint)","Hors-ligne — réessai auto"],error:["⚠","var(--red)","Erreur de synchro — touchez"],off:["☁","var(--ink-faint)",sb?"Touchez pour vous connecter":"Sauvegarde cloud non configurée"]};
   const m=map[s]||map.off;b.textContent=m[0];b.style.color=m[1];b.title=m[2];
 }
-async function ghReq(method,body){
-  const url=`https://api.github.com/repos/${gh.owner}/${gh.repo}/contents/${gh.path}`;
-  const opt={method,headers:{"Authorization":`Bearer ${gh.token}`,"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"}};
-  if(body)opt.body=JSON.stringify(body);
-  return fetch(url,opt);
-}
-async function syncPull(){
+/* récupère la ligne de l'utilisateur (sa sauvegarde) */
+async function sbPull(){
   if(!syncEnabled())return "off";
   setSync("syncing");
   try{
-    const r=await ghReq("GET");
-    if(r.status===404){gh.sha=null;setSync("synced");return "empty";}
-    if(r.status===401||r.status===403){setSync("error");return "auth";}
-    if(!r.ok){setSync("error");return "err";}
-    const j=await r.json();gh.sha=j.sha;
-    const txt=b64dec(j.content||"");
-    const remote=txt.trim()?JSON.parse(txt):null;
+    const {data,error}=await sb.from("finances").select("data").eq("user_id",sbUser.id).maybeSingle();
+    if(error){setSync("error");return "err";}
+    const remote=data&&data.data;
     if(remote&&remote.tx){
       if((remote.updatedAt||0)>=(state.updatedAt||0)){state=migrate(remote);save();}
       setSync("synced");return "ok";
     }
-    setSync("synced");return "empty"; // fichier vide → on poussera le local
+    setSync("synced");return "empty"; // pas encore de sauvegarde → on poussera le local
   }catch(e){setSync("offline");return "offline";}
 }
 let pushT,pushing=false,pushAgain=false;
-function schedulePush(){if(!syncEnabled())return;setSync("pending");clearTimeout(pushT);pushT=setTimeout(()=>syncPush(),1400);}
-async function syncPush(){
+function schedulePush(){if(!syncEnabled())return;setSync("pending");clearTimeout(pushT);pushT=setTimeout(()=>sbPush(),1200);}
+async function sbPush(){
   if(!syncEnabled())return;
   if(pushing){pushAgain=true;return;}
   pushing=true;setSync("syncing");
   try{
-    const content=b64enc(JSON.stringify(state));
-    const body={message:`maj ${new Date().toISOString()}`,content};
-    if(gh.sha)body.sha=gh.sha;
-    let r=await ghReq("PUT",body);
-    if(r.status===409||r.status===422){ // conflit de sha → on relit le sha et on réessaie une fois
-      const g=await ghReq("GET");
-      if(g.ok){const j=await g.json();gh.sha=j.sha;body.sha=gh.sha;r=await ghReq("PUT",body);}
-    }
-    if(r.status===401||r.status===403){setSync("error");toast("Jeton GitHub refusé","amber");return;}
-    if(!r.ok){setSync("error");return;}
-    const j=await r.json();gh.sha=j.content.sha;setSync("synced");
+    const {error}=await sb.from("finances").upsert({user_id:sbUser.id,data:state,updated_at:new Date().toISOString()},{onConflict:"user_id"});
+    if(error){setSync("error");}else setSync("synced");
   }catch(e){setSync("offline");}
   finally{pushing=false;if(pushAgain){pushAgain=false;schedulePush();}}
 }
+/* temps réel : un autre appareil modifie → on met à jour en direct */
+function sbSubscribe(){
+  if(!sb||!sbUser)return;
+  try{
+    sb.channel("finances_live").on("postgres_changes",
+      {event:"*",schema:"public",table:"finances",filter:"user_id=eq."+sbUser.id},
+      payload=>{const remote=payload.new&&payload.new.data;if(remote&&remote.tx&&(remote.updatedAt||0)>(state.updatedAt||0)){state=migrate(remote);save();render();setSync("synced");}}
+    ).subscribe();
+  }catch(e){}
+}
+async function cloudInit(){
+  if(!sb)return false;
+  try{const {data}=await sb.auth.getSession();if(data&&data.session){sbUser=data.session.user;return true;}}catch(e){}
+  return false;
+}
+/* connexion par email : code à 6 chiffres (pas de redirection → fiable sur iPhone) */
 function openSync(){
-  const connected=syncEnabled();
-  const body=`
-    <div class="hint" style="margin:0 0 14px">Tes données sont enregistrées dans ton repo GitHub <b>privé</b> et synchronisées automatiquement. Le jeton reste sur cet appareil, il n'est jamais publié.</div>
-    <div class="fld"><label>Jeton d'accès GitHub (fine-grained)</label><input id="ghTok" type="password" value="${esc(gh.token)}" placeholder="github_pat_…" autocomplete="off"></div>
-    <div class="frow">
-      <div class="fld"><label>Compte</label><input id="ghOwner" value="${esc(gh.owner)}"></div>
-      <div class="fld"><label>Repo</label><input id="ghRepo" value="${esc(gh.repo)}"></div>
-    </div>
-    <div class="fld"><label>Fichier</label><input id="ghPath" value="${esc(gh.path)}"></div>
-    <div class="hint">
-      <b>Créer le jeton (1 fois) :</b><br>
-      1. github.com → photo de profil → <b>Settings</b><br>
-      2. tout en bas : <b>Developer settings</b> → <b>Personal access tokens</b> → <b>Fine-grained tokens</b><br>
-      3. <b>Generate new token</b>. Nom : « Finances ». Expiration : 1 an (ou +).<br>
-      4. <b>Repository access</b> → <b>Only select repositories</b> → choisis <b>finances-data</b><br>
-      5. <b>Permissions</b> → <b>Repository permissions</b> → <b>Contents</b> → <b>Read and write</b><br>
-      6. <b>Generate token</b>, copie-le et colle-le ci-dessus.
-    </div>`;
-  let foot=`<button class="btn btn-primary" id="ghSave">${connected?"Tester & enregistrer":"Connecter"}</button>`;
-  if(connected)foot+=`<button class="btn btn-ghost" id="ghDisc" style="margin-top:8px">Déconnecter cet appareil</button>`;
-  openSheet("Sauvegarde cloud (GitHub)",body,foot);
-  document.getElementById("ghSave").onclick=async()=>{
-    gh.token=document.getElementById("ghTok").value.trim();
-    gh.owner=document.getElementById("ghOwner").value.trim()||"LucasMachut";
-    gh.repo=document.getElementById("ghRepo").value.trim()||"finances-data";
-    gh.path=document.getElementById("ghPath").value.trim()||"data.json";
-    gh.sha=null;
-    if(!gh.token){toast("Colle ton jeton GitHub","amber");return;}
-    saveGhCfg();toast("Connexion…");
-    const res=await syncPull();
-    if(res==="auth"){toast("Jeton invalide ou droits insuffisants","amber");return;}
-    if(res==="offline"){toast("Pas de connexion — réessaie","amber");return;}
-    if(res==="empty"){await syncPush();toast("Connecté ✓ Données envoyées au cloud","green");}
-    else if(res==="ok"){toast("Connecté ✓ Données récupérées du cloud","green");}
-    else{toast("Connecté, mais réponse inattendue","amber");}
-    closeSheet();render();
+  if(!sb){openSheet("Sauvegarde cloud",`<div class="hint">La sauvegarde cloud sera disponible dès que la configuration Supabase sera renseignée. 🙂</div>`);return;}
+  if(syncEnabled()){
+    openSheet("Sauvegarde cloud",`
+      <div class="info-line"><span class="k">Compte</span><span class="v">${esc(sbUser.email||"—")}</span></div>
+      <div class="info-line"><span class="k">État</span><span class="v" style="color:var(--green)">Synchronisé ✓</span></div>
+      <div class="hint" style="margin-top:12px">Tes données sont sauvegardées dans le cloud et synchronisées sur tous tes appareils connectés à ce compte. Chaque « Enregistrer » part automatiquement.</div>`,
+      `<button class="btn btn-ghost" id="sbOut">Se déconnecter de cet appareil</button>`);
+    document.getElementById("sbOut").onclick=async()=>{if(!confirm("Se déconnecter ? Les données restent dans le cloud et en local."))return;try{await sb.auth.signOut();}catch(e){}sbUser=null;setSync("off");closeSheet();render();toast("Déconnecté");};
+    return;
+  }
+  openSheet("Connexion cloud",`
+    <div class="hint" style="margin:0 0 14px">Connecte-toi avec ton email. Tu recevras un <b>code à 6 chiffres</b> à saisir. Une fois connecté, tout se sauvegarde et se synchronise automatiquement sur tous tes appareils.</div>
+    <div class="fld"><label>Ton email</label><input id="sbEmail" type="email" inputmode="email" autocomplete="email" placeholder="toi@email.com" value="${esc(localStorage.getItem('finances_sb_email')||'')}"></div>`,
+    `<button class="btn btn-primary" id="sbSend">Recevoir le code</button>`);
+  document.getElementById("sbSend").onclick=async()=>{
+    const email=document.getElementById("sbEmail").value.trim();
+    if(!email||email.indexOf("@")<1){toast("Entre un email valide","amber");return;}
+    try{localStorage.setItem("finances_sb_email",email);}catch(e){}
+    toast("Envoi du code…");
+    const {error}=await sb.auth.signInWithOtp({email,options:{shouldCreateUser:true}});
+    if(error){toast("Erreur : "+error.message,"amber");return;}
+    openSheet("Connexion cloud",`
+      <div class="hint" style="margin:0 0 14px">Code à 6 chiffres envoyé à <b>${esc(email)}</b> (vérifie les spams). Saisis-le ci-dessous.</div>
+      <div class="fld"><label>Code reçu par email</label><input id="sbCode" inputmode="numeric" autocomplete="one-time-code" placeholder="123456"></div>`,
+      `<button class="btn btn-primary" id="sbVerify">Se connecter</button><button class="btn btn-ghost" id="sbResend" style="margin-top:8px">Renvoyer un code</button>`);
+    document.getElementById("sbResend").onclick=()=>{sb.auth.signInWithOtp({email,options:{shouldCreateUser:true}});toast("Nouveau code envoyé");};
+    document.getElementById("sbVerify").onclick=async()=>{
+      const token=document.getElementById("sbCode").value.trim();
+      if(!token){toast("Saisis le code reçu","amber");return;}
+      toast("Connexion…");
+      const {data,error}=await sb.auth.verifyOtp({email,token,type:"email"});
+      if(error||!data||!data.user){toast("Code invalide ou expiré","amber");return;}
+      sbUser=data.user;
+      const res=await sbPull();
+      if(res==="empty"||_starterReplaced){state.updatedAt=Date.now();save();await sbPush();}
+      sbSubscribe();closeSheet();render();
+      toast("Connecté ✓ Sauvegarde activée","green");
+    };
   };
-  const dc=document.getElementById("ghDisc");
-  if(dc)dc.onclick=()=>{if(!confirm("Déconnecter cet appareil ? Les données restent dans le cloud et en local."))return;gh.token="";gh.sha=null;saveGhCfg();setSync("off");closeSheet();toast("Déconnecté");};
 }
 
 /* =====================================================================
@@ -1259,20 +1255,18 @@ let _theme="dark";try{_theme=localStorage.getItem("finances_theme")||"dark";}cat
 applyTheme(_theme);
 document.getElementById("btnTheme").onclick=()=>applyTheme(document.documentElement.getAttribute("data-theme")==="light"?"dark":"light");
 
-/* init : si la sauvegarde cloud est active, on récupère d'abord la dernière version,
-   sinon on démarre directement sur les données locales. */
-if(syncEnabled()){
+/* init : on affiche tout de suite les données locales, puis on synchronise le cloud en arrière-plan. */
+topUpRecurrences();render();
+(async function(){
+  if(!sb){setSync("off");return;}
+  const logged=await cloudInit();
+  if(!logged){setSync("off");return;}
   setSync("syncing");
-  syncPull().then(res=>{
-    topUpRecurrences();
-    if(res==="empty"||_starterReplaced){ // 1re fois, ou remplacement des données d'exemple : on pousse le local
-      state.updatedAt=Date.now();save();render();syncPush();
-    }else render();
-  });
-}else{
-  setSync("off");
-  topUpRecurrences();render();
-}
+  const res=await sbPull();
+  topUpRecurrences();
+  if(res==="empty"||_starterReplaced){state.updatedAt=Date.now();save();sbPush();}
+  render();sbSubscribe();
+})();
 window.addEventListener("online",()=>{if(syncEnabled())schedulePush();});
 refreshFx(); // taux EUR→BRL du jour (puis cache 6 h)
 </script>
