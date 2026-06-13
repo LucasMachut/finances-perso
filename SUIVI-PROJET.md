@@ -32,6 +32,12 @@
 - **Catégories** : ajout **et suppression de n'importe quelle catégorie** (avertissement si utilisée → les mouvements basculent en « Autres »).
 - **Classement ponctuel/récurrent** dès la saisie d'un mouvement (choix Ponctuel / Tous les mois).
 
+## 🆕 MAJ 13/06/2026 (nuit) — double devise partout + saisie plus rapide
+
+- **Tous les montants affichés en € ET R$.** Plus aucun montant en une seule devise : héro, marges, jauge, totaux jour par jour, catégories (accueil + analyse), objectifs, récurrentes, net récurrent, info-bulles des graphes… tout passe par `dualEUR`/`signedDualEUR`. La récurrente affiche aussi son équivalent (`≈`).
+- **Création express de catégorie depuis la saisie.** Bouton « ＋ Catégorie » directement dans le sélecteur de catégories (dépense, revenu et récurrente) : on tape le nom, la catégorie est créée et sélectionnée sans quitter le formulaire (icône/couleur par défaut, modifiables ensuite dans « Gérer les catégories »).
+- **Multiplication d'une dépense.** Champ « Montant unitaire » × « Quantité » avec **total calculé en direct dans les deux devises** (ex : ticket de métro × nombre de trajets). Le détail `prix×qté` est rappelé sous le mouvement.
+
 ## ❓ Questions pour Lucas (à répondre demain)
 
 1. **Jours de prélèvement** loyer / Adobe / Free / mutuelle ? (mis au 5 par défaut)

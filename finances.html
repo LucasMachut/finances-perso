@@ -259,6 +259,7 @@
   .fld textarea{resize:none;min-height:64px}
   .frow{display:flex;gap:11px}
   .frow .fld{flex:1}
+  .total-box{width:100%;padding:13px 14px;border:1.5px solid var(--brand);border-radius:var(--radius-sm);background:var(--brand-soft);color:var(--brand);font-weight:800;font-size:14.5px;font-variant-numeric:tabular-nums;min-height:21px}
   .opt{color:var(--ink-faint);font-weight:500;font-size:12px}
   .choice{display:flex;gap:10px}
   .choice button{flex:1;padding:13px;border-radius:var(--radius-sm);border:1.5px solid var(--line-strong);background:var(--surface);font-weight:700;color:var(--ink-soft);display:flex;flex-direction:column;align-items:center;gap:3px}
@@ -267,6 +268,10 @@
   .cat-pick{display:flex;gap:8px;flex-wrap:wrap}
   .cat-pick button{padding:9px 12px;border-radius:999px;border:1.5px solid var(--line-strong);background:var(--surface);font-weight:700;font-size:13px;color:var(--ink-soft);display:inline-flex;align-items:center;gap:6px}
   .cat-pick button.on{border-color:var(--brand);background:var(--brand-soft);color:var(--brand)}
+  .cat-pick button.catnew{border-style:dashed;color:var(--brand);border-color:var(--brand)}
+  .catnew-wrap{display:flex;gap:8px;margin-top:9px}
+  .catnew-wrap input{flex:1;min-width:0;padding:10px 12px;border-radius:12px;border:1.5px solid var(--line-strong);background:var(--surface);font-weight:600;font-size:14px;color:var(--ink)}
+  .catnew-wrap .btn{width:auto;padding:0 16px;margin:0}
   .color-pick{display:flex;gap:9px;flex-wrap:wrap}
   .color-pick .sw{width:34px;height:34px;border-radius:50%;cursor:pointer;border:3px solid transparent}
   .color-pick .sw.on{border-color:var(--ink);transform:scale(1.08)}
@@ -543,7 +548,7 @@ function renderHeader(){
     cap.textContent=`${JOURS[d.getDay()]} · ${d.getDate()} ${MOIS[d.getMonth()].slice(0,4)}`.toUpperCase();
     title.textContent=`${greeting()}, ${userNom()}`;
     const s=statsMois(ymNow());
-    sub.innerHTML=`<span class="hd-stats"><span>Marge du mois</span> · <b style="color:${s.marge>=0?'var(--green)':'var(--red)'}">${signed(s.marge)}</b></span>`;
+    sub.innerHTML=`<span class="hd-stats"><span>Marge du mois</span> · <b style="color:${s.marge>=0?'var(--green)':'var(--red)'}">${signedDualEUR(s.marge)}</b></span>`;
   }else{
     const t={mouvements:["MOUVEMENTS","Revenus & dépenses"],analyse:["ANALYSE","Tendances & catégories"],objectifs:["OBJECTIFS","Mon épargne"]}[ui.tab];
     cap.textContent=t[0];title.textContent={mouvements:"Mouvements",analyse:"Analyse",objectifs:"Objectifs"}[ui.tab];sub.textContent=t[1];
@@ -573,7 +578,7 @@ function renderAccueil(){
     catHtml=cats.slice(0,4).map(c=>{const ct=cat(c.id);const pct=Math.round(c.v/s.depenses*100);return `
       <div class="cat-row">
         <div class="cat-ico" style="background:${ct.cor}">${ct.icone}</div>
-        <div class="cat-bar"><div class="cbtop"><span class="cbn">${esc(ct.nom)}</span><span class="cbv">${money(c.v)}</span></div>
+        <div class="cat-bar"><div class="cbtop"><span class="cbn">${esc(ct.nom)}</span><span class="cbv">${dualEUR(c.v)}</span></div>
           <div class="cbtrack"><i style="width:${Math.round(c.v/maxCat*100)}%;background:${ct.cor}"></i></div></div>
         <div class="cat-pct">${pct}%</div>
       </div>`;}).join("");
@@ -605,10 +610,10 @@ function renderAccueil(){
     <div class="card" style="padding:16px">
       <div class="gauge"><i style="width:${tauxPct}%;background:linear-gradient(90deg,var(--brand),var(--green))"></i></div>
       <div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;color:var(--ink-faint)">
-        <span>${Math.round(s.taux)}% de marge</span><span>${money(s.marge)} restant</span></div>
+        <span>${Math.round(s.taux)}% de marge</span><span>${dualEUR(s.marge)} restant</span></div>
     </div>
 
-    <div class="section-title">Dépenses par catégorie <span class="right">${money(s.depenses)}</span></div>
+    <div class="section-title">Dépenses par catégorie <span class="right">${dualEUR(s.depenses)}</span></div>
     <div class="card" style="padding:16px 16px 4px">${catHtml}</div>
 
     ${objs.length?`<div class="section-title">Objectifs <span class="count">${objs.length}</span></div>${objHtml}
@@ -618,7 +623,7 @@ function renderAccueil(){
     <div class="card" style="padding:16px" id="recCard">
       <div class="info-line"><span class="k">Revenus récurrents</span><span class="v" style="color:var(--green)">${dualEUR(rm.r)}</span></div>
       <div class="info-line"><span class="k">Dépenses récurrentes</span><span class="v" style="color:var(--red)">${dualEUR(rm.d)}</span></div>
-      <div class="info-line"><span class="k">Net récurrent / mois</span><span class="v" style="color:${recNet>=0?'var(--green)':'var(--red)'}">${signed(recNet)}</span></div>
+      <div class="info-line"><span class="k">Net récurrent / mois</span><span class="v" style="color:${recNet>=0?'var(--green)':'var(--red)'}">${signedDualEUR(recNet)}</span></div>
       <button class="btn btn-ghost" id="goRec" style="margin-top:12px">Gérer les récurrentes</button>
     </div>`;
 
@@ -644,14 +649,14 @@ function renderMouvements(){
     days.forEach(d=>{
       const dd=parseYmd(d);
       const tot=groups[d].reduce((a,t)=>a+(t.type==="revenu"?1:-1)*toEUR(t.montant,t.cur),0);
-      listHtml+=`<div class="day-head"><span class="dnum">${dd.getDate()} ${MOIS[dd.getMonth()].slice(0,4)} · ${JOURS[dd.getDay()]}</span><span class="dtot">${signed(tot)}</span></div>`;
+      listHtml+=`<div class="day-head"><span class="dnum">${dd.getDate()} ${MOIS[dd.getMonth()].slice(0,4)} · ${JOURS[dd.getDay()]}</span><span class="dtot">${signedDualEUR(tot)}</span></div>`;
       groups[d].forEach(t=>{
         const ct=cat(t.categorie);const isRev=t.type==="revenu";
         const conv=t.cur==="BRL"?fmtCur(toEUR(t.montant,"BRL"),"EUR"):fmtCur(eurToBrl(t.montant),"BRL");
         listHtml+=`<div class="tx-row" data-tx="${t.id}">
           <div class="tx-ico" style="background:${ct.cor}">${ct.icone}</div>
           <div class="tx-body"><div class="tx-nm">${esc(t.note||ct.nom)}</div>
-            <div class="tx-meta">${esc(ct.nom)}${t.recId?`<span class="tx-rec">↻ récurrent</span>`:""} · ≈ ${conv}</div></div>
+            <div class="tx-meta">${esc(ct.nom)}${t.recId?`<span class="tx-rec">↻ récurrent</span>`:""}${t.qte&&Number(t.qte)!==1?` · ${fmtCur(t.pu,t.cur)}×${t.qte}`:""} · ≈ ${conv}</div></div>
           <div class="tx-amt ${isRev?'in':'out'}">${isRev?"+":"−"}${fmtCur(t.montant,t.cur)}</div></div>`;
       });
     });
@@ -690,7 +695,7 @@ function renderAnalyse(){
   const totRev=an.reduce((a,m)=>a+m.revenus,0),totDep=an.reduce((a,m)=>a+m.depenses,0);
 
   // barres annuelles
-  const barsHtml=an.map((m,i)=>`<div class="bcol ${i===curM?'cur':''}" title="${MOIS[i]} · ${money(m.marge)}">
+  const barsHtml=an.map((m,i)=>`<div class="bcol ${i===curM?'cur':''}" title="${MOIS[i]} · ${dualEUR(m.marge)}">
       <div class="bpair"><div class="bb rev" style="height:${Math.round(m.revenus/maxBar*100)}%"></div><div class="bb dep" style="height:${Math.round(m.depenses/maxBar*100)}%"></div></div>
       <div class="bx">${MOIS[i][0].toUpperCase()}</div></div>`).join("");
 
@@ -710,14 +715,14 @@ function renderAnalyse(){
   const catBars=cats.length?cats.map(c=>{const ct=cat(c.id);const pct=Math.round(c.v/s.depenses*100);return `
     <div class="cat-row">
       <div class="cat-ico" style="background:${ct.cor}">${ct.icone}</div>
-      <div class="cat-bar"><div class="cbtop"><span class="cbn">${esc(ct.nom)}</span><span class="cbv">${money(c.v)}</span></div>
+      <div class="cat-bar"><div class="cbtop"><span class="cbn">${esc(ct.nom)}</span><span class="cbv">${dualEUR(c.v)}</span></div>
         <div class="cbtrack"><i style="width:${Math.round(c.v/maxCat*100)}%;background:${ct.cor}"></i></div></div>
       <div class="cat-pct">${pct}%</div></div>`;}).join(""):`<div class="hint" style="text-align:center;padding:10px 0">—</div>`;
 
   // marge 12 mois (mini bars +/-)
   const maxMarge=Math.max(1,...an.map(m=>Math.abs(m.marge)));
   const margeBars=an.map((m,i)=>{const h=Math.round(Math.abs(m.marge)/maxMarge*100);const pos=m.marge>=0;return `
-    <div class="mb ${i===curM?'cur':''}" title="${MOIS[i]} · ${money(m.marge)}">
+    <div class="mb ${i===curM?'cur':''}" title="${MOIS[i]} · ${dualEUR(m.marge)}">
       <div class="mbtop">${pos?`<div class="mbar" style="height:${h}%"></div>`:""}</div>
       <div class="mb-zero"></div>
       <div class="mbbot">${!pos?`<div class="mbar" style="height:${h}%"></div>`:""}</div>
@@ -731,7 +736,7 @@ function renderAnalyse(){
       <div class="sum full"><div class="lbl">Marge · taux ${Math.round(s.taux)}% · 1 € = ${fmtCur(fxRate(),'BRL')}</div><div class="val" style="color:${s.marge>=0?'var(--green)':'var(--red)'};font-size:18px">${signedDualEUR(s.marge)}</div></div>
     </div>
 
-    <div class="section-title">📈 Année ${year} <span class="right">marge ${money(totRev-totDep)}</span></div>
+    <div class="section-title">📈 Année ${year} <span class="right">marge ${dualEUR(totRev-totDep)}</span></div>
     <div class="card" style="padding:16px 12px 12px">
       <div class="bars">${barsHtml}</div>
       <div class="chart-leg"><span><i style="background:var(--green)"></i>Revenus</span><span><i style="background:var(--red)"></i>Dépenses</span></div>
@@ -740,7 +745,7 @@ function renderAnalyse(){
     <div class="section-title">🍩 Répartition des dépenses</div>
     <div class="card">${donutHtml}</div>
 
-    <div class="section-title">Détail par catégorie <span class="right">${money(s.depenses)}</span></div>
+    <div class="section-title">Détail par catégorie <span class="right">${dualEUR(s.depenses)}</span></div>
     <div class="card" style="padding:16px 16px 4px">${catBars}</div>
 
     <div class="section-title">📊 Marge mois par mois — ${year}</div>
@@ -762,11 +767,11 @@ function goalCard(o,preview){
   return `<div class="goal" data-goal="${o.id}">
     <div class="goal-top">
       <div class="goal-ico" style="background:${o.cor}">${o.icone||"🎯"}</div>
-      <div style="flex:1;min-width:0"><div class="gnm">${esc(o.nom)}</div><div class="gmeta">${money(ep)} / ${money(cible)}${ech}</div></div>
+      <div style="flex:1;min-width:0"><div class="gnm">${esc(o.nom)}</div><div class="gmeta">${dualEUR(ep)} / ${dualEUR(cible)}${ech}</div></div>
       <div class="gpct" style="color:${pct>=100?'var(--green)':'var(--ink)'}">${pct}%</div>
     </div>
     <div class="progress"><i style="width:${pct}%;background:${pct>=100?'var(--green)':o.cor}"></i></div>
-    ${preview?"":`<div class="goal-foot"><span>${pct>=100?"✓ Objectif atteint":"Reste "+money(reste)}</span><span>${money(ep)} épargnés</span></div>`}
+    ${preview?"":`<div class="goal-foot"><span>${pct>=100?"✓ Objectif atteint":"Reste "+dualEUR(reste)}</span><span>${dualEUR(ep)} épargnés</span></div>`}
   </div>`;
 }
 function renderObjectifs(){
@@ -811,7 +816,23 @@ function closeSheet(){document.getElementById("sheetBg").classList.remove("show"
 
 function catPickHtml(type){
   const list=state.categories.filter(c=>c.type===type);
-  return `<div class="cat-pick" id="cPick">${list.map(c=>`<button data-c="${c.id}" class="${draft.categorie===c.id?"on":""}">${c.icone} ${esc(c.nom)}</button>`).join("")}</div>`;
+  return `<div class="cat-pick" id="cPick">${list.map(c=>`<button type="button" data-c="${c.id}" class="${draft.categorie===c.id?"on":""}">${c.icone} ${esc(c.nom)}</button>`).join("")}<button type="button" class="catnew" id="cNewCat">＋ Catégorie</button></div>
+  <div class="catnew-wrap" id="cNewWrap" style="display:none"><input id="cNewNom" placeholder="Nom de la nouvelle catégorie"><button type="button" class="btn btn-primary" id="cNewSave">Ajouter</button></div>`;
+}
+/* câble le sélecteur de catégories (+ création express d'une catégorie) dans un formulaire */
+function wireCatPick(sb,wrapId){
+  sb.querySelectorAll("#cPick [data-c]").forEach(b=>b.onclick=()=>{draft.categorie=b.dataset.c;sb.querySelectorAll("#cPick [data-c]").forEach(x=>x.classList.toggle("on",x.dataset.c===draft.categorie));});
+  const newBtn=sb.querySelector("#cNewCat"),wrap=sb.querySelector("#cNewWrap"),inp=sb.querySelector("#cNewNom"),saveCat=sb.querySelector("#cNewSave");
+  if(newBtn)newBtn.onclick=()=>{const open=wrap.style.display==="none";wrap.style.display=open?"flex":"none";if(open&&inp)inp.focus();};
+  const createCat=()=>{
+    const nom=(inp.value||"").trim();if(!nom){toast("Renseignez un nom de catégorie","amber");return;}
+    const nc={id:uid(),nom,cor:PALETTE[state.categories.length%PALETTE.length],icone:draft.type==="revenu"?"💰":"📦",type:draft.type};
+    state.categories.push(nc);draft.categorie=nc.id;mark();
+    document.getElementById(wrapId).innerHTML=catPickHtml(draft.type);wireCatPick(sb,wrapId);
+    toast("Catégorie « "+nom+" » créée ✓","green");
+  };
+  if(saveCat)saveCat.onclick=createCat;
+  if(inp)inp.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();createCat();}};
 }
 function formTx(existing,presetType){
   const isEdit=!!existing;
@@ -825,8 +846,12 @@ function formTx(existing,presetType){
         <button data-t="revenu" class="${draft.type==="revenu"?"on":""}">Revenu<small>entrée d'argent</small></button>
       </div></div>
     <div class="frow">
-      <div class="fld" style="flex:1.5"><label>Montant</label><input id="tMontant" inputmode="decimal" value="${draft.montant||""}" placeholder="Ex : 49,90"></div>
+      <div class="fld" style="flex:1.5"><label>Montant unitaire</label><input id="tMontant" inputmode="decimal" value="${draft.pu!=null?draft.pu:(draft.montant||"")}" placeholder="Ex : 49,90"></div>
       <div class="fld" style="flex:1"><label>Devise</label><select id="tCur"><option value="EUR" ${draft.cur!=="BRL"?"selected":""}>€ Euro</option><option value="BRL" ${draft.cur==="BRL"?"selected":""}>R$ Réal</option></select></div>
+    </div>
+    <div class="frow">
+      <div class="fld" style="flex:1"><label>× Quantité</label><input id="tQte" inputmode="decimal" value="${draft.qte&&Number(draft.qte)!==1?draft.qte:""}" placeholder="1"></div>
+      <div class="fld" style="flex:1.5"><label>Total</label><div class="total-box" id="tTotal">—</div></div>
     </div>
     <div class="fld"><label>Date</label><input type="date" id="tDate" value="${draft.date}"></div>
     <div class="fld"><label>Catégorie</label><div id="tCatWrap">${catPickHtml(draft.type)}</div></div>
@@ -840,7 +865,7 @@ function formTx(existing,presetType){
   if(isEdit)foot+=`<button class="btn btn-danger" id="tDel" style="margin-top:8px">Supprimer</button>`;
   openSheet(isEdit?"Modifier le mouvement":"Nouveau mouvement",body,foot);
   const sb=document.getElementById("sheetBody");
-  const wireCats=()=>{sb.querySelectorAll("#cPick [data-c]").forEach(b=>b.onclick=()=>{draft.categorie=b.dataset.c;sb.querySelectorAll("#cPick [data-c]").forEach(x=>x.classList.toggle("on",x.dataset.c===draft.categorie));});};
+  const wireCats=()=>wireCatPick(sb,"tCatWrap");
   wireCats();
   sb.querySelectorAll("#tType [data-t]").forEach(b=>b.onclick=()=>{
     draft.type=b.dataset.t;sb.querySelectorAll("#tType [data-t]").forEach(x=>x.classList.toggle("on",x.dataset.t===draft.type));
@@ -848,8 +873,21 @@ function formTx(existing,presetType){
     document.getElementById("tCatWrap").innerHTML=catPickHtml(draft.type);wireCats();
   });
   sb.querySelectorAll("#tFreq [data-r]").forEach(b=>b.onclick=()=>{draft._rec=b.dataset.r==="1";sb.querySelectorAll("#tFreq [data-r]").forEach(x=>x.classList.toggle("on",x.dataset.r===b.dataset.r));});
+  // total en direct (montant unitaire × quantité), dans les deux devises
+  const elPu=document.getElementById("tMontant"),elQte=document.getElementById("tQte"),elCur=document.getElementById("tCur"),elTot=document.getElementById("tTotal");
+  const numOf=el=>parseFloat(String(el.value).replace(",","."))||0;
+  const refreshTotal=()=>{
+    const pu=numOf(elPu),qte=numOf(elQte)||1,tot=Math.round(pu*qte*100)/100;
+    if(!pu){elTot.textContent="—";return;}
+    const cur=elCur.value==="BRL"?"BRL":"EUR";
+    const eur=toEUR(tot,cur),autre=cur==="BRL"?fmtCur(eur,"EUR"):fmtCur(eurToBrl(tot),"BRL");
+    elTot.textContent=fmtCur(tot,cur)+" · "+autre;
+  };
+  [elPu,elQte].forEach(el=>el.oninput=refreshTotal);elCur.onchange=refreshTotal;refreshTotal();
   document.getElementById("tSave").onclick=()=>{
-    draft.montant=parseFloat(String(document.getElementById("tMontant").value).replace(",","."))||0;
+    const pu=numOf(elPu),qte=numOf(elQte)||1;
+    draft.montant=Math.round(pu*qte*100)/100;
+    draft.pu=pu;draft.qte=qte;
     draft.cur=document.getElementById("tCur").value==="BRL"?"BRL":"EUR";
     draft.date=document.getElementById("tDate").value;
     draft.note=document.getElementById("tNote").value.trim();
@@ -901,7 +939,7 @@ function formObjectif(existing){
   if(add)add.onclick=()=>{
     const v=prompt("Montant à ajouter à l'épargne (€) :","");if(v===null)return;
     const n=parseFloat(String(v).replace(",","."))||0;if(!n)return;
-    const o=state.objectifs.find(x=>x.id===draft.id);if(o){o.epargne=(Number(o.epargne)||0)+n;mark();closeSheet();render();toast(money(n)+" ajoutés ✓","green");}
+    const o=state.objectifs.find(x=>x.id===draft.id);if(o){o.epargne=(Number(o.epargne)||0)+n;mark();closeSheet();render();toast(dualEUR(n)+" ajoutés ✓","green");}
   };
   const del=document.getElementById("oDel");
   if(del)del.onclick=()=>{if(!confirm("Supprimer cet objectif ?"))return;state.objectifs=state.objectifs.filter(o=>o.id!==draft.id);mark();closeSheet();render();toast("Objectif supprimé");};
@@ -914,7 +952,7 @@ function openRecurrences(){
     <div class="rec-row">
       <div class="tx-ico" style="background:${ct.cor}">${ct.icone}</div>
       <div class="rbody" data-redit="${r.id}"><div class="rnm">${esc(r.note||ct.nom)}</div>
-        <div class="rmeta">${r.type==="revenu"?"Revenu":"Dépense"} · le ${r.jour} du mois · ${esc(ct.nom)}</div></div>
+        <div class="rmeta">${r.type==="revenu"?"Revenu":"Dépense"} · le ${r.jour} du mois · ${esc(ct.nom)} · ≈ ${r.cur==="BRL"?fmtCur(toEUR(r.montant,"BRL"),"EUR"):fmtCur(eurToBrl(r.montant),"BRL")}</div></div>
       <div class="ramt" style="color:${r.type==="revenu"?'var(--green)':'var(--red)'}">${r.type==="revenu"?"+":"−"}${fmtCur(r.montant,r.cur)}</div>
       <div class="toggle ${r.actif?"on":""}" data-rtog="${r.id}"></div>
     </div>`;}).join(""):`<div class="empty" style="padding:30px"><div class="ico">↻</div><h3>Aucune récurrente</h3><p>Loyer, salaire, abonnements…</p></div>`;
@@ -947,7 +985,7 @@ function formRecurrence(existing){
   if(isEdit)foot+=`<button class="btn btn-danger" id="rDel" style="margin-top:8px">Supprimer</button>`;
   openSheet(isEdit?"Modifier la récurrente":"Nouvelle récurrente",body,foot);
   const sb=document.getElementById("sheetBody");
-  const wireCats=()=>{sb.querySelectorAll("#cPick [data-c]").forEach(b=>b.onclick=()=>{draft.categorie=b.dataset.c;sb.querySelectorAll("#cPick [data-c]").forEach(x=>x.classList.toggle("on",x.dataset.c===draft.categorie));});};
+  const wireCats=()=>wireCatPick(sb,"rCatWrap");
   wireCats();
   sb.querySelectorAll("#rType [data-t]").forEach(b=>b.onclick=()=>{
     draft.type=b.dataset.t;sb.querySelectorAll("#rType [data-t]").forEach(x=>x.classList.toggle("on",x.dataset.t===draft.type));
