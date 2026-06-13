@@ -1133,8 +1133,8 @@ function handleImport(file){
    SAUVEGARDE CLOUD — Supabase (connexion par email, sync auto multi-appareils)
    La clé "anon" est publique par conception ; la sécurité vient de l'auth + RLS.
    ===================================================================== */
-const SB_URL="";   /* ← à remplir : https://xxxxxxxx.supabase.co */
-const SB_ANON="";  /* ← à remplir : clé "anon public" du projet */
+const SB_URL="https://zadsiirtjvznmcepawje.supabase.co";
+const SB_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHNpaXJ0anZ6bm1jZXBhd2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzQyODcsImV4cCI6MjA5Njk1MDI4N30.GQWO5s2BM2zw1zQ3ZcEgyyCSiB1bPl3aoPz59MrpDM0";
 let sb=null,sbUser=null,sbStatus="off";
 try{ if(SB_URL&&SB_ANON&&window.supabase){ sb=window.supabase.createClient(SB_URL,SB_ANON,{auth:{persistSession:true,autoRefreshToken:true,storageKey:"finances_sb_auth"}}); } }catch(e){}
 function syncEnabled(){return !!(sb&&sbUser);}
@@ -1185,7 +1185,7 @@ async function cloudInit(){
   try{const {data}=await sb.auth.getSession();if(data&&data.session){sbUser=data.session.user;return true;}}catch(e){}
   return false;
 }
-/* connexion par email : code à 6 chiffres (pas de redirection → fiable sur iPhone) */
+/* connexion par email + mot de passe (aucun email envoyé → fiable partout, iPhone compris) */
 function openSync(){
   if(!sb){openSheet("Sauvegarde cloud",`<div class="hint">La sauvegarde cloud sera disponible dès que la configuration Supabase sera renseignée. 🙂</div>`);return;}
   if(syncEnabled()){
@@ -1198,33 +1198,31 @@ function openSync(){
     return;
   }
   openSheet("Connexion cloud",`
-    <div class="hint" style="margin:0 0 14px">Connecte-toi avec ton email. Tu recevras un <b>code à 6 chiffres</b> à saisir. Une fois connecté, tout se sauvegarde et se synchronise automatiquement sur tous tes appareils.</div>
-    <div class="fld"><label>Ton email</label><input id="sbEmail" type="email" inputmode="email" autocomplete="email" placeholder="toi@email.com" value="${esc(localStorage.getItem('finances_sb_email')||'')}"></div>`,
-    `<button class="btn btn-primary" id="sbSend">Recevoir le code</button>`);
-  document.getElementById("sbSend").onclick=async()=>{
+    <div class="hint" style="margin:0 0 14px">Connecte-toi avec ton email et un mot de passe. La 1re fois ça crée ton compte ; ensuite, mêmes identifiants sur chaque appareil. Une fois connecté, tout se sauvegarde et se synchronise automatiquement.</div>
+    <div class="fld"><label>Email</label><input id="sbEmail" type="email" inputmode="email" autocomplete="email" placeholder="toi@email.com" value="${esc(localStorage.getItem('finances_sb_email')||'')}"></div>
+    <div class="fld"><label>Mot de passe <span class="opt">(6 caractères min.)</span></label><input id="sbPwd" type="password" autocomplete="current-password" placeholder="••••••••"></div>`,
+    `<button class="btn btn-primary" id="sbGo">Se connecter / créer le compte</button>`);
+  document.getElementById("sbGo").onclick=async()=>{
     const email=document.getElementById("sbEmail").value.trim();
+    const pwd=document.getElementById("sbPwd").value;
     if(!email||email.indexOf("@")<1){toast("Entre un email valide","amber");return;}
+    if(!pwd||pwd.length<6){toast("Mot de passe : 6 caractères minimum","amber");return;}
     try{localStorage.setItem("finances_sb_email",email);}catch(e){}
-    toast("Envoi du code…");
-    const {error}=await sb.auth.signInWithOtp({email,options:{shouldCreateUser:true}});
-    if(error){toast("Erreur : "+error.message,"amber");return;}
-    openSheet("Connexion cloud",`
-      <div class="hint" style="margin:0 0 14px">Code à 6 chiffres envoyé à <b>${esc(email)}</b> (vérifie les spams). Saisis-le ci-dessous.</div>
-      <div class="fld"><label>Code reçu par email</label><input id="sbCode" inputmode="numeric" autocomplete="one-time-code" placeholder="123456"></div>`,
-      `<button class="btn btn-primary" id="sbVerify">Se connecter</button><button class="btn btn-ghost" id="sbResend" style="margin-top:8px">Renvoyer un code</button>`);
-    document.getElementById("sbResend").onclick=()=>{sb.auth.signInWithOtp({email,options:{shouldCreateUser:true}});toast("Nouveau code envoyé");};
-    document.getElementById("sbVerify").onclick=async()=>{
-      const token=document.getElementById("sbCode").value.trim();
-      if(!token){toast("Saisis le code reçu","amber");return;}
-      toast("Connexion…");
-      const {data,error}=await sb.auth.verifyOtp({email,token,type:"email"});
-      if(error||!data||!data.user){toast("Code invalide ou expiré","amber");return;}
-      sbUser=data.user;
-      const res=await sbPull();
-      if(res==="empty"||_starterReplaced){state.updatedAt=Date.now();save();await sbPush();}
-      sbSubscribe();closeSheet();render();
-      toast("Connecté ✓ Sauvegarde activée","green");
-    };
+    toast("Connexion…");
+    let {data,error}=await sb.auth.signInWithPassword({email,password:pwd});
+    if(error){
+      // pas encore de compte sur cet email → on le crée
+      const r=await sb.auth.signUp({email,password:pwd});
+      if(r.error){toast(/already|registered|exist/i.test(r.error.message||"")?"Mot de passe incorrect pour cet email":("Erreur : "+r.error.message),"amber");return;}
+      data=r.data;
+      if(!data||!data.session){toast("Compte créé, mais connexion en attente. Désactive « Confirm email » dans Supabase puis réessaie.","amber");return;}
+    }
+    if(!data||!data.user){toast("Connexion impossible","amber");return;}
+    sbUser=data.user;
+    const res=await sbPull();
+    if(res==="empty"||_starterReplaced){state.updatedAt=Date.now();save();await sbPush();}
+    sbSubscribe();closeSheet();render();
+    toast("Connecté ✓ Sauvegarde activée","green");
   };
 }
 
