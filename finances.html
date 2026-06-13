@@ -378,7 +378,7 @@
    Même logique que "Pulso pour Richard" : 1 fichier, localStorage, backup JSON
    ===================================================================== */
 const KEY="finances_perso_v1";
-const APP_VERSION="1.6";
+const APP_VERSION="1.7";
 const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
 const MOIS=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
 const JOURS=["dim","lun","mar","mer","jeu","ven","sam"];
@@ -876,6 +876,7 @@ function formTx(existing,presetType){
   if(!draft.categorie){const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"";}
   const advOpen=isEdit&&((draft.qte&&Number(draft.qte)!==1)||(draft.montants&&draft.montants.length));
   const body=`
+    <div class="fld"><label>Titre</label><input id="tNote" value="${esc(draft.note||"")}" placeholder="Ex : Courses, Loyer, Salaire…"></div>
     <div class="fld"><label>Type</label>
       <div class="choice" id="tType">
         <button data-t="depense" class="${draft.type==="depense"?"on":""}">Dépense<small>sortie d'argent</small></button>
@@ -895,7 +896,6 @@ function formTx(existing,presetType){
     </div>
     <div class="fld"><label>Date</label><input type="date" id="tDate" value="${draft.date}"></div>
     <div class="fld"><label>Catégorie</label><div id="tCatWrap">${catPickHtml(draft.type)}</div></div>
-    <div class="fld"><label>Note <span class="opt">(optionnel)</span></label><input id="tNote" value="${esc(draft.note||"")}" placeholder="Ex : Courses Carrefour"></div>
     ${isEdit?"":`<div class="fld"><label>Fréquence</label>
       <div class="choice" id="tFreq">
         <button data-r="0" class="${draft._rec?"":"on"}">Ponctuel<small>une seule fois</small></button>
