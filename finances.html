@@ -373,7 +373,7 @@
    Même logique que "Pulso pour Richard" : 1 fichier, localStorage, backup JSON
    ===================================================================== */
 const KEY="finances_perso_v1";
-const APP_VERSION="1.4";
+const APP_VERSION="1.5";
 const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
 const MOIS=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
 const JOURS=["dim","lun","mar","mer","jeu","ven","sam"];
@@ -568,8 +568,11 @@ function renderHeader(){
 function renderAccueil(){
   const el=document.getElementById("page-accueil");
   const ym=ymNow();const s=statsMois(ym);
-  const tauxPct=Math.max(0,Math.min(100,s.taux));
   const margeCol=s.marge>=0?"var(--green)":"var(--red)";
+  // jauge "budget consommé" : part des revenus dépensée (vide = ok, pleine/rouge = tout dépensé)
+  const tauxDep=s.revenus>0?Math.round(s.depenses/s.revenus*100):(s.depenses>0?100:0);
+  const depW=Math.min(100,Math.max(0,tauxDep));
+  const gCol=tauxDep>100?"var(--red)":(tauxDep>=85?"var(--amber)":"var(--green)");
 
   // top catégories du mois
   const cats=Object.keys(s.byCat).map(id=>({id,v:s.byCat[id]})).sort((a,b)=>b.v-a.v);
@@ -607,11 +610,11 @@ function renderAccueil(){
       </div>
     </div>
 
-    <div class="section-title">Taux de marge</div>
+    <div class="section-title">Budget du mois</div>
     <div class="card" style="padding:16px">
-      <div class="gauge"><i style="width:${tauxPct}%;background:linear-gradient(90deg,var(--brand),var(--green))"></i></div>
+      <div class="gauge"><i style="width:${depW}%;background:${gCol}"></i></div>
       <div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;color:var(--ink-faint)">
-        <span>${Math.round(s.taux)}% de marge</span><span>${dualEUR(s.marge)} restant</span></div>
+        <span style="color:${gCol}">${tauxDep}% des revenus dépensés</span><span>marge ${Math.round(s.taux)}% · ${dualEUR(s.marge)}</span></div>
     </div>
 
     <div class="section-title">Dépenses par catégorie <span class="right">${dualEUR(s.depenses)}</span></div>
@@ -840,6 +843,7 @@ function formTx(existing,presetType){
   draft=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),type:presetType||"depense",date:todayYmd(),montant:"",cur:"EUR",categorie:"",note:"",_rec:false};
   if(!draft.cur)draft.cur="EUR";
   if(!draft.categorie){const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"";}
+  const advOpen=isEdit&&((draft.qte&&Number(draft.qte)!==1)||(draft.montants&&draft.montants.length));
   const body=`
     <div class="fld"><label>Type</label>
       <div class="choice" id="tType">
@@ -847,14 +851,17 @@ function formTx(existing,presetType){
         <button data-t="revenu" class="${draft.type==="revenu"?"on":""}">Revenu<small>entrée d'argent</small></button>
       </div></div>
     <div class="frow">
-      <div class="fld" style="flex:1.5"><label>Montant unitaire</label><input id="tMontant" inputmode="decimal" value="${draft.pu?draft.pu:((draft.montants&&draft.montants.length)?'':(draft.montant||''))}" placeholder="Ex : 49,90"></div>
+      <div class="fld" style="flex:1.5"><label>Montant</label><input id="tMontant" inputmode="decimal" value="${draft.pu?draft.pu:((draft.montants&&draft.montants.length)?'':(draft.montant||''))}" placeholder="Ex : 49,90"></div>
       <div class="fld" style="flex:1"><label>Devise</label><select id="tCur"><option value="EUR" ${draft.cur!=="BRL"?"selected":""}>€ Euro</option><option value="BRL" ${draft.cur==="BRL"?"selected":""}>R$ Réal</option></select></div>
     </div>
-    <div class="frow">
-      <div class="fld" style="flex:1"><label>× Quantité</label><input id="tQte" inputmode="decimal" value="${draft.qte&&Number(draft.qte)!==1?draft.qte:""}" placeholder="1"></div>
-      <div class="fld" style="flex:1.5"><label>Total</label><div class="total-box" id="tTotal">—</div></div>
+    <button type="button" id="tAdvBtn" style="background:none;color:var(--brand);font-weight:700;font-size:13px;padding:0;margin:-6px 0 14px">${advOpen?"− Masquer le détail":"＋ Détailler (× quantité, plusieurs montants)"}</button>
+    <div id="tAdv" style="display:${advOpen?"block":"none"}">
+      <div class="frow">
+        <div class="fld" style="flex:1"><label>× Quantité</label><input id="tQte" inputmode="decimal" value="${draft.qte&&Number(draft.qte)!==1?draft.qte:""}" placeholder="1"></div>
+        <div class="fld" style="flex:1.5"><label>Total</label><div class="total-box" id="tTotal">—</div></div>
+      </div>
+      <div class="fld"><label>Plusieurs montants <span class="opt">(séparés par un espace — s'additionnent)</span></label><input id="tListe" inputmode="decimal" value="${(draft.montants&&draft.montants.length)?draft.montants.join(' '):''}" placeholder="Ex : 9,90  9,90  12  8,50"></div>
     </div>
-    <div class="fld"><label>Plusieurs montants <span class="opt">(séparés par un espace — s'additionnent)</span></label><input id="tListe" inputmode="decimal" value="${(draft.montants&&draft.montants.length)?draft.montants.join(' '):''}" placeholder="Ex : 9,90  9,90  12  8,50"></div>
     <div class="fld"><label>Date</label><input type="date" id="tDate" value="${draft.date}"></div>
     <div class="fld"><label>Catégorie</label><div id="tCatWrap">${catPickHtml(draft.type)}</div></div>
     <div class="fld"><label>Note <span class="opt">(optionnel)</span></label><input id="tNote" value="${esc(draft.note||"")}" placeholder="Ex : Courses Carrefour"></div>
@@ -889,6 +896,8 @@ function formTx(existing,presetType){
     elTot.textContent=fmtCur(tot,cur)+" · "+autre+(liste.length>1?`  ·  ${liste.length} montants`:"");
   };
   [elPu,elQte,elListe].forEach(el=>el.oninput=refreshTotal);elCur.onchange=refreshTotal;refreshTotal();
+  const advBtn=document.getElementById("tAdvBtn"),advBox=document.getElementById("tAdv");
+  if(advBtn)advBtn.onclick=()=>{const o=advBox.style.display==="none";advBox.style.display=o?"block":"none";advBtn.textContent=o?"− Masquer le détail":"＋ Détailler (× quantité, plusieurs montants)";};
   document.getElementById("tSave").onclick=()=>{
     const {tot,pu,qte,liste}=calcTotal();
     draft.montant=tot;
