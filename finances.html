@@ -367,7 +367,7 @@
    Même logique que "Pulso pour Richard" : 1 fichier, localStorage, backup JSON
    ===================================================================== */
 const KEY="finances_perso_v1";
-const APP_VERSION="1.1";
+const APP_VERSION="1.2";
 const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
 const MOIS=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
 const JOURS=["dim","lun","mar","mer","jeu","ven","sam"];
@@ -392,20 +392,26 @@ const DEF_CATS=[
 const CAT_ICONES=["🏠","🛒","🚗","🍽️","🎮","💊","📱","🏛️","🛍️","📦","💼","💻","➕","🎓","🐶","✈️","🎁","💡","💳","🏦"];
 const GOAL_ICONES=["🎯","✈️","🏖️","🚗","🏠","💍","🎓","💻","📷","🛟","🎄","💰","🏔️","🛵","🎸","👶"];
 
+let _starterReplaced=false;
 let state=load();
 let ui={tab:"accueil",mvFilter:"tout",finMonth:null};
 let draft=null;
 
 function migrate(s){
+  _starterReplaced=!!(s&&s.demo===true);
+  if(_starterReplaced)s=seed(); // anciennes données d'exemple → vrai jeu de départ (récurrentes réelles)
   if(!s.tx)s.tx=[];
   if(!s.recurrences)s.recurrences=[];
   if(!s.categories||!s.categories.length)s.categories=JSON.parse(JSON.stringify(DEF_CATS));
   if(!s.objectifs)s.objectifs=[];
-  if(!s.config)s.config={nom:"Lucas",devise:"EUR"};
+  if(!s.config)s.config={nom:"Lucas"};
   if(!("lastBackup" in s))s.lastBackup=null;
   if(!("demo" in s))s.demo=false;
   if(!("changes" in s))s.changes=0;
   if(!("updatedAt" in s))s.updatedAt=0;
+  if(!s.fx||typeof s.fx!=="object")s.fx={rate:null,ts:0};
+  s.tx.forEach(t=>{if(!t.cur)t.cur="EUR";});                 // devise par défaut : euro
+  s.recurrences.forEach(r=>{if(!r.cur)r.cur="EUR";});
   s._appVersion=APP_VERSION;
   return s;
 }
@@ -414,42 +420,49 @@ function load(){
   return seed();
 }
 function seed(){
+  // Vrai jeu de départ : aucune donnée fictive, juste les charges récurrentes réelles de Lucas.
   const cats=JSON.parse(JSON.stringify(DEF_CATS));
-  const today=new Date();
-  const ymOff=off=>{const d=new Date(today.getFullYear(),today.getMonth()+off,1);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");};
-  const tx=[];
-  const add=(off,day,type,cat,montant,note)=>tx.push({id:uid(),type,date:ymOff(off)+"-"+String(day).padStart(2,"0"),montant,categorie:cat,note:note||""});
-  // 3 mois de données d'exemple (les charges fixes sont gérées par les récurrentes ci-dessous)
-  [-2,-1,0].forEach(o=>{
-    add(o,15,"revenu","freelance",520+o*40,"Vacations LSF");
-    add(o,9,"depense","courses",118,"Supermarché");
-    add(o,21,"depense","courses",92,"Supermarché");
-    add(o,11,"depense","transport",70,"Essence / transports");
-    add(o,18,"depense","restau",54,"Restau");
-    add(o,24,"depense","loisirs",32,"Sorties");
-    add(o,16,"depense","sante",26,"Pharmacie");
-    add(o,27,"depense","shopping",65,"");
-  });
+  const m=ymNow();
   const rec=[
-    {id:uid(),type:"revenu",montant:2200,categorie:"salaire",note:"Salaire",jour:2,actif:true,desde:ymOff(-2)},
-    {id:uid(),type:"depense",montant:780,categorie:"logement",note:"Loyer",jour:3,actif:true,desde:ymOff(-2)},
-    {id:uid(),type:"depense",montant:48,categorie:"abos",note:"Internet + mobile",jour:5,actif:true,desde:ymOff(-2)},
-    {id:uid(),type:"depense",montant:13,categorie:"abos",note:"Streaming",jour:6,actif:true,desde:ymOff(-2)},
+    {id:uid(),type:"revenu", montant:1650,cur:"EUR",categorie:"salaire", note:"Salaire", jour:30,actif:true,desde:m},
+    {id:uid(),type:"depense",montant:3100,cur:"BRL",categorie:"logement",note:"Loyer",   jour:5, actif:true,desde:m},
+    {id:uid(),type:"depense",montant:350, cur:"BRL",categorie:"abos",    note:"Adobe",   jour:5, actif:true,desde:m},
+    {id:uid(),type:"depense",montant:20,  cur:"EUR",categorie:"abos",    note:"Free",    jour:5, actif:true,desde:m},
+    {id:uid(),type:"depense",montant:20,  cur:"EUR",categorie:"sante",   note:"Mutuelle",jour:5, actif:true,desde:m},
   ];
-  const objs=[
-    {id:uid(),nom:"Épargne de précaution",cible:6000,epargne:2400,cor:"#2FE6A6",icone:"🛟",echeance:""},
-    {id:uid(),nom:"Voyage Japon",cible:3500,epargne:800,cor:"#16D1FF",icone:"✈️",echeance:ymOff(8)},
-  ];
-  return{tx,recurrences:rec,categories:cats,objectifs:objs,config:{nom:"Lucas",devise:"EUR"},lastBackup:null,demo:true,changes:0,updatedAt:0};
+  return{tx:[],recurrences:rec,categories:cats,objectifs:[],config:{nom:"Lucas"},fx:{rate:null,ts:0},lastBackup:null,demo:false,changes:0,updatedAt:0};
 }
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Erreur d'enregistrement","amber");}}
 function mark(){state.changes=(state.changes||0)+1;state.updatedAt=Date.now();save();schedulePush();}
 
-/* ---------- helpers ---------- */
-function money(n){n=Number(n)||0;return n.toLocaleString("fr-FR",{style:"currency",currency:"EUR",maximumFractionDigits:n%1===0?0:2});}
+/* ---------- helpers devise & change ---------- */
+const FX_FALLBACK=5.9; // 1 € ≈ 5,9 R$ tant que le taux du jour n'a pas été récupéré
+function fxRate(){return (state.fx&&Number(state.fx.rate))||FX_FALLBACK;}
+function fxKnown(){return !!(state.fx&&state.fx.rate);}
+function toEUR(n,cur){n=Number(n)||0;return cur==="BRL"?n/fxRate():n;}
+function eurToBrl(n){return (Number(n)||0)*fxRate();}
+/* formate un montant dans SA devise */
+function fmtCur(n,cur){
+  n=Number(n)||0;const intg=Math.abs(n-Math.round(n))<0.005;
+  const opt={style:"currency",currency:cur==="BRL"?"BRL":"EUR",minimumFractionDigits:intg?0:2,maximumFractionDigits:intg?0:2};
+  return n.toLocaleString(cur==="BRL"?"pt-BR":"fr-FR",opt);
+}
+/* à partir d'un montant en EUR : affiche « € · R$ » (les deux devises) */
+function dualEUR(eur){return fmtCur(eur,"EUR")+" · "+fmtCur(eurToBrl(eur),"BRL");}
+function signedDualEUR(eur){const s=eur>=0?"+":"−";const a=Math.abs(eur);return s+fmtCur(a,"EUR")+"  ·  "+s+fmtCur(eurToBrl(a),"BRL");}
+/* compat : money/signed manipulent des montants déjà en EUR */
+function money(n){return fmtCur(n,"EUR");}
 function money0(n){n=Number(n)||0;return Math.round(n).toLocaleString("fr-FR")+" €";}
-function moneyK(n){n=Number(n)||0;return Math.abs(n)>=1000?(n/1000).toLocaleString("fr-FR",{maximumFractionDigits:1})+"k":Math.round(n)+"";}
 function signed(n){return (n>=0?"+":"−")+money(Math.abs(n));}
+/* récupère le taux EUR→BRL du jour (frankfurter / ECB, fallback open.er-api), mis en cache 6 h */
+async function refreshFx(force){
+  const stale=!state.fx||!state.fx.rate||(Date.now()-(state.fx.ts||0)>6*3600*1000);
+  if(!force&&!stale)return;
+  const tryUrl=async(url,pick)=>{try{const r=await fetch(url);if(!r.ok)return null;const j=await r.json();return pick(j);}catch(e){return null;}};
+  let rate=await tryUrl("https://api.frankfurter.dev/v1/latest?base=EUR&symbols=BRL",j=>j&&j.rates&&j.rates.BRL);
+  if(!rate)rate=await tryUrl("https://open.er-api.com/v6/latest/EUR",j=>j&&j.rates&&j.rates.BRL);
+  if(rate){state.fx={rate:Number(rate),ts:Date.now()};save();render();}
+}
 function ymNow(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");}
 function todayYmd(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 function parseYmd(s){const[y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d);}
@@ -470,7 +483,7 @@ function topUpRecurrences(){
     while(ym<=cur&&guard<360){
       if(!state.tx.some(t=>t.recId===r.id&&(t.date||"").startsWith(ym))){
         const day=Math.min(Number(r.jour)||1,daysInMonth(ym));
-        state.tx.push({id:uid(),type:r.type,date:ym+"-"+String(day).padStart(2,"0"),montant:Number(r.montant)||0,categorie:r.categorie,note:r.note||"",recId:r.id});
+        state.tx.push({id:uid(),type:r.type,date:ym+"-"+String(day).padStart(2,"0"),montant:Number(r.montant)||0,cur:r.cur||"EUR",categorie:r.categorie,note:r.note||"",recId:r.id});
         added=true;
       }
       ym=shiftMonth(ym,1);guard++;
@@ -482,9 +495,9 @@ function topUpRecurrences(){
 /* ---------- agrégations ---------- */
 function txMois(ym){return state.tx.filter(t=>(t.date||"").startsWith(ym));}
 function statsMois(ym){
-  let revenus=0,depenses=0;const byCat={};
+  let revenus=0,depenses=0;const byCat={}; // tous les montants ramenés en EUR
   txMois(ym).forEach(t=>{
-    const v=Number(t.montant)||0;
+    const v=toEUR(t.montant,t.cur);
     if(t.type==="revenu")revenus+=v;
     else{depenses+=v;byCat[t.categorie]=(byCat[t.categorie]||0)+v;}
   });
@@ -496,7 +509,7 @@ function statsAnnee(year){
   const out=[];for(let m=1;m<=12;m++){const ym=year+"-"+String(m).padStart(2,"0");const s=statsMois(ym);out.push({ym,revenus:s.revenus,depenses:s.depenses,marge:s.marge});}
   return out;
 }
-function recMensuel(){let r=0,d=0;(state.recurrences||[]).forEach(x=>{if(!x.actif)return;const v=Number(x.montant)||0;if(x.type==="revenu")r+=v;else d+=v;});return{r,d};}
+function recMensuel(){let r=0,d=0;(state.recurrences||[]).forEach(x=>{if(!x.actif)return;const v=toEUR(x.montant,x.cur);if(x.type==="revenu")r+=v;else d+=v;});return{r,d};}
 
 /* =====================================================================
    RENDER
@@ -580,10 +593,11 @@ function renderAccueil(){
     <div class="hero">
       <div class="hcap">${esc(moisLabel(ym))} · solde du mois</div>
       <div class="hbig ${s.marge>=0?'pos':'neg'}">${signed(s.marge)}</div>
-      <div class="hsub">Taux de marge ${Math.round(s.taux)}% ${s.marge>=0?"épargné sur vos revenus":"— mois déficitaire"}</div>
+      <div style="font-size:19px;font-weight:800;margin-top:1px;font-variant-numeric:tabular-nums;color:${s.marge>=0?'var(--green)':'var(--red)'}">${(s.marge>=0?'+':'−')+fmtCur(eurToBrl(Math.abs(s.marge)),'BRL')}</div>
+      <div class="hsub">Taux de marge ${Math.round(s.taux)}% · 1 € = ${fmtCur(fxRate(),'BRL')}${fxKnown()?"":" (estimé)"}</div>
       <div class="hsplit">
-        <div class="hpill"><div class="hpl">Revenus</div><div class="hpv in">${money(s.revenus)}</div></div>
-        <div class="hpill"><div class="hpl">Dépenses</div><div class="hpv out">${money(s.depenses)}</div></div>
+        <div class="hpill"><div class="hpl">Revenus</div><div class="hpv in">${money(s.revenus)}</div><div style="font-size:12px;color:var(--ink-faint);font-weight:700;margin-top:2px">${fmtCur(eurToBrl(s.revenus),'BRL')}</div></div>
+        <div class="hpill"><div class="hpl">Dépenses</div><div class="hpv out">${money(s.depenses)}</div><div style="font-size:12px;color:var(--ink-faint);font-weight:700;margin-top:2px">${fmtCur(eurToBrl(s.depenses),'BRL')}</div></div>
       </div>
     </div>
 
@@ -602,8 +616,8 @@ function renderAccueil(){
 
     <div class="section-title">Charges récurrentes</div>
     <div class="card" style="padding:16px" id="recCard">
-      <div class="info-line"><span class="k">Revenus récurrents</span><span class="v" style="color:var(--green)">${money(rm.r)}</span></div>
-      <div class="info-line"><span class="k">Dépenses récurrentes</span><span class="v" style="color:var(--red)">${money(rm.d)}</span></div>
+      <div class="info-line"><span class="k">Revenus récurrents</span><span class="v" style="color:var(--green)">${dualEUR(rm.r)}</span></div>
+      <div class="info-line"><span class="k">Dépenses récurrentes</span><span class="v" style="color:var(--red)">${dualEUR(rm.d)}</span></div>
       <div class="info-line"><span class="k">Net récurrent / mois</span><span class="v" style="color:${recNet>=0?'var(--green)':'var(--red)'}">${signed(recNet)}</span></div>
       <button class="btn btn-ghost" id="goRec" style="margin-top:12px">Gérer les récurrentes</button>
     </div>`;
@@ -629,15 +643,16 @@ function renderMouvements(){
   if(days.length){
     days.forEach(d=>{
       const dd=parseYmd(d);
-      const tot=groups[d].reduce((a,t)=>a+(t.type==="revenu"?1:-1)*(Number(t.montant)||0),0);
+      const tot=groups[d].reduce((a,t)=>a+(t.type==="revenu"?1:-1)*toEUR(t.montant,t.cur),0);
       listHtml+=`<div class="day-head"><span class="dnum">${dd.getDate()} ${MOIS[dd.getMonth()].slice(0,4)} · ${JOURS[dd.getDay()]}</span><span class="dtot">${signed(tot)}</span></div>`;
       groups[d].forEach(t=>{
         const ct=cat(t.categorie);const isRev=t.type==="revenu";
+        const conv=t.cur==="BRL"?fmtCur(toEUR(t.montant,"BRL"),"EUR"):fmtCur(eurToBrl(t.montant),"BRL");
         listHtml+=`<div class="tx-row" data-tx="${t.id}">
           <div class="tx-ico" style="background:${ct.cor}">${ct.icone}</div>
           <div class="tx-body"><div class="tx-nm">${esc(t.note||ct.nom)}</div>
-            <div class="tx-meta">${esc(ct.nom)}${t.recId?`<span class="tx-rec">↻ récurrent</span>`:""}</div></div>
-          <div class="tx-amt ${isRev?'in':'out'}">${isRev?"+":"−"}${money(t.montant)}</div></div>`;
+            <div class="tx-meta">${esc(ct.nom)}${t.recId?`<span class="tx-rec">↻ récurrent</span>`:""} · ≈ ${conv}</div></div>
+          <div class="tx-amt ${isRev?'in':'out'}">${isRev?"+":"−"}${fmtCur(t.montant,t.cur)}</div></div>`;
       });
     });
   }else{
@@ -647,9 +662,9 @@ function renderMouvements(){
   el.innerHTML=`
     <div class="month-nav"><button id="mPrev">‹</button><span class="mlabel">${esc(moisLabel(ym))}</span><button id="mNext">›</button></div>
     <div class="summary">
-      <div class="sum green"><div class="lbl">Revenus</div><div class="val">${money(s.revenus)}</div></div>
-      <div class="sum red"><div class="lbl">Dépenses</div><div class="val">${money(s.depenses)}</div></div>
-      <div class="sum full"><div class="lbl">Marge (revenus − dépenses)</div><div class="val" style="color:${s.marge>=0?'var(--green)':'var(--red)'}">${signed(s.marge)}</div></div>
+      <div class="sum green"><div class="lbl">Revenus</div><div class="val">${money(s.revenus)}</div><div style="font-size:12.5px;color:var(--ink-faint);font-weight:700;margin-top:3px">${fmtCur(eurToBrl(s.revenus),'BRL')}</div></div>
+      <div class="sum red"><div class="lbl">Dépenses</div><div class="val">${money(s.depenses)}</div><div style="font-size:12.5px;color:var(--ink-faint);font-weight:700;margin-top:3px">${fmtCur(eurToBrl(s.depenses),'BRL')}</div></div>
+      <div class="sum full"><div class="lbl">Marge (revenus − dépenses)</div><div class="val" style="color:${s.marge>=0?'var(--green)':'var(--red)'};font-size:18px">${signedDualEUR(s.marge)}</div></div>
     </div>
     ${listHtml}`;
   document.getElementById("mPrev").onclick=()=>{ui.finMonth=shiftMonth(ym,-1);render();};
@@ -686,7 +701,7 @@ function renderAnalyse(){
   if(cats.length){
     const leg=cats.slice(0,6).map(c=>{const ct=cat(c.id);const pct=Math.round(c.v/s.depenses*100);return `<div class="dl"><i style="background:${ct.cor}"></i><span class="dln">${esc(ct.nom)}</span><span class="dlv">${pct}%</span></div>`;}).join("");
     donutHtml=`<div class="donut-wrap">
-      <div class="donut-c">${donutSvg(segs)}<div class="donut-center"><div class="dc-v">${money0(s.depenses)}</div><div class="dc-l">dépenses</div></div></div>
+      <div class="donut-c">${donutSvg(segs)}<div class="donut-center"><div class="dc-v">${money0(s.depenses)}</div><div class="dc-l">dépenses</div><div style="font-size:11px;color:var(--ink-faint);font-weight:700;margin-top:2px">${fmtCur(eurToBrl(s.depenses),'BRL')}</div></div></div>
       <div class="donut-leg">${leg}</div></div>`;
   }else donutHtml=`<div class="hint" style="text-align:center;padding:24px">Aucune dépense ce mois-ci.</div>`;
 
@@ -711,9 +726,9 @@ function renderAnalyse(){
   el.innerHTML=`
     <div class="month-nav"><button id="mPrev">‹</button><span class="mlabel">${esc(moisLabel(ym))}</span><button id="mNext">›</button></div>
     <div class="summary">
-      <div class="sum green"><div class="lbl">Revenus</div><div class="val">${money(s.revenus)}</div></div>
-      <div class="sum red"><div class="lbl">Dépenses</div><div class="val">${money(s.depenses)}</div></div>
-      <div class="sum full"><div class="lbl">Marge · taux ${Math.round(s.taux)}%</div><div class="val" style="color:${s.marge>=0?'var(--green)':'var(--red)'}">${signed(s.marge)}</div></div>
+      <div class="sum green"><div class="lbl">Revenus</div><div class="val">${money(s.revenus)}</div><div style="font-size:12.5px;color:var(--ink-faint);font-weight:700;margin-top:3px">${fmtCur(eurToBrl(s.revenus),'BRL')}</div></div>
+      <div class="sum red"><div class="lbl">Dépenses</div><div class="val">${money(s.depenses)}</div><div style="font-size:12.5px;color:var(--ink-faint);font-weight:700;margin-top:3px">${fmtCur(eurToBrl(s.depenses),'BRL')}</div></div>
+      <div class="sum full"><div class="lbl">Marge · taux ${Math.round(s.taux)}% · 1 € = ${fmtCur(fxRate(),'BRL')}</div><div class="val" style="color:${s.marge>=0?'var(--green)':'var(--red)'};font-size:18px">${signedDualEUR(s.marge)}</div></div>
     </div>
 
     <div class="section-title">📈 Année ${year} <span class="right">marge ${money(totRev-totDep)}</span></div>
@@ -765,9 +780,9 @@ function renderObjectifs(){
 
   let html=`
     <div class="summary">
-      <div class="sum green"><div class="lbl">Total épargné</div><div class="val">${money(totEp)}</div></div>
-      <div class="sum"><div class="lbl">Objectif total</div><div class="val">${money(totCible)}</div></div>
-      <div class="sum full"><div class="lbl">Capacité d'épargne / mois (moy. 3 mois)</div><div class="val" style="color:${capacite>=0?'var(--green)':'var(--red)'}">${signed(capacite)}</div></div>
+      <div class="sum green"><div class="lbl">Total épargné</div><div class="val">${money(totEp)}</div><div style="font-size:12.5px;color:var(--ink-faint);font-weight:700;margin-top:3px">${fmtCur(eurToBrl(totEp),'BRL')}</div></div>
+      <div class="sum"><div class="lbl">Objectif total</div><div class="val">${money(totCible)}</div><div style="font-size:12.5px;color:var(--ink-faint);font-weight:700;margin-top:3px">${fmtCur(eurToBrl(totCible),'BRL')}</div></div>
+      <div class="sum full"><div class="lbl">Capacité d'épargne / mois (moy. 3 mois)</div><div class="val" style="color:${capacite>=0?'var(--green)':'var(--red)'};font-size:18px">${signedDualEUR(capacite)}</div></div>
     </div>`;
   if(objs.length){
     html+=`<div class="section-title">Mes objectifs <span class="count">${objs.length}</span></div>`;
@@ -800,7 +815,8 @@ function catPickHtml(type){
 }
 function formTx(existing,presetType){
   const isEdit=!!existing;
-  draft=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),type:presetType||"depense",date:todayYmd(),montant:"",categorie:"",note:""};
+  draft=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),type:presetType||"depense",date:todayYmd(),montant:"",cur:"EUR",categorie:"",note:"",_rec:false};
+  if(!draft.cur)draft.cur="EUR";
   if(!draft.categorie){const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"";}
   const body=`
     <div class="fld"><label>Type</label>
@@ -809,11 +825,17 @@ function formTx(existing,presetType){
         <button data-t="revenu" class="${draft.type==="revenu"?"on":""}">Revenu<small>entrée d'argent</small></button>
       </div></div>
     <div class="frow">
-      <div class="fld"><label>Montant (€)</label><input id="tMontant" inputmode="decimal" value="${draft.montant||""}" placeholder="Ex : 49,90"></div>
-      <div class="fld"><label>Date</label><input type="date" id="tDate" value="${draft.date}"></div>
+      <div class="fld" style="flex:1.5"><label>Montant</label><input id="tMontant" inputmode="decimal" value="${draft.montant||""}" placeholder="Ex : 49,90"></div>
+      <div class="fld" style="flex:1"><label>Devise</label><select id="tCur"><option value="EUR" ${draft.cur!=="BRL"?"selected":""}>€ Euro</option><option value="BRL" ${draft.cur==="BRL"?"selected":""}>R$ Réal</option></select></div>
     </div>
+    <div class="fld"><label>Date</label><input type="date" id="tDate" value="${draft.date}"></div>
     <div class="fld"><label>Catégorie</label><div id="tCatWrap">${catPickHtml(draft.type)}</div></div>
-    <div class="fld"><label>Note <span class="opt">(optionnel)</span></label><input id="tNote" value="${esc(draft.note||"")}" placeholder="Ex : Courses Carrefour"></div>`;
+    <div class="fld"><label>Note <span class="opt">(optionnel)</span></label><input id="tNote" value="${esc(draft.note||"")}" placeholder="Ex : Courses Carrefour"></div>
+    ${isEdit?"":`<div class="fld"><label>Fréquence</label>
+      <div class="choice" id="tFreq">
+        <button data-r="0" class="${draft._rec?"":"on"}">Ponctuel<small>une seule fois</small></button>
+        <button data-r="1" class="${draft._rec?"on":""}">Tous les mois<small>récurrent</small></button>
+      </div></div>`}`;
   let foot=`<button class="btn btn-primary" id="tSave">${isEdit?"Enregistrer":"Ajouter"}</button>`;
   if(isEdit)foot+=`<button class="btn btn-danger" id="tDel" style="margin-top:8px">Supprimer</button>`;
   openSheet(isEdit?"Modifier le mouvement":"Nouveau mouvement",body,foot);
@@ -825,13 +847,20 @@ function formTx(existing,presetType){
     const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"";
     document.getElementById("tCatWrap").innerHTML=catPickHtml(draft.type);wireCats();
   });
+  sb.querySelectorAll("#tFreq [data-r]").forEach(b=>b.onclick=()=>{draft._rec=b.dataset.r==="1";sb.querySelectorAll("#tFreq [data-r]").forEach(x=>x.classList.toggle("on",x.dataset.r===b.dataset.r));});
   document.getElementById("tSave").onclick=()=>{
     draft.montant=parseFloat(String(document.getElementById("tMontant").value).replace(",","."))||0;
+    draft.cur=document.getElementById("tCur").value==="BRL"?"BRL":"EUR";
     draft.date=document.getElementById("tDate").value;
     draft.note=document.getElementById("tNote").value.trim();
     if(!draft.date||!draft.montant){toast("Renseignez le montant et la date","amber");return;}
     if(!draft.categorie){const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"autres";}
-    delete draft.recId; // une transaction éditée manuellement se détache de la récurrence
+    if(!isEdit&&draft._rec){
+      // saisie classée « récurrent » → on crée une charge/recette récurrente
+      const rec={id:uid(),type:draft.type,montant:draft.montant,cur:draft.cur,categorie:draft.categorie,note:draft.note,jour:Math.min(28,parseYmd(draft.date).getDate()),actif:true,desde:draft.date.slice(0,7)};
+      state.recurrences.push(rec);topUpRecurrences();mark();closeSheet();ui.finMonth=draft.date.slice(0,7);render();toast("Récurrente créée ✓","green");return;
+    }
+    delete draft._rec;delete draft.recId; // un mouvement édité à la main se détache de sa récurrence
     const idx=state.tx.findIndex(t=>t.id===draft.id);
     if(idx>=0)state.tx[idx]=draft;else state.tx.push(draft);
     mark();closeSheet();ui.finMonth=draft.date.slice(0,7);render();toast(isEdit?"Mouvement enregistré ✓":"Mouvement ajouté ✓","green");
@@ -886,7 +915,7 @@ function openRecurrences(){
       <div class="tx-ico" style="background:${ct.cor}">${ct.icone}</div>
       <div class="rbody" data-redit="${r.id}"><div class="rnm">${esc(r.note||ct.nom)}</div>
         <div class="rmeta">${r.type==="revenu"?"Revenu":"Dépense"} · le ${r.jour} du mois · ${esc(ct.nom)}</div></div>
-      <div class="ramt" style="color:${r.type==="revenu"?'var(--green)':'var(--red)'}">${r.type==="revenu"?"+":"−"}${money(r.montant)}</div>
+      <div class="ramt" style="color:${r.type==="revenu"?'var(--green)':'var(--red)'}">${r.type==="revenu"?"+":"−"}${fmtCur(r.montant,r.cur)}</div>
       <div class="toggle ${r.actif?"on":""}" data-rtog="${r.id}"></div>
     </div>`;}).join(""):`<div class="empty" style="padding:30px"><div class="ico">↻</div><h3>Aucune récurrente</h3><p>Loyer, salaire, abonnements…</p></div>`;
   openSheet("Charges récurrentes",body,`<button class="btn btn-primary" id="rAdd">＋ Nouvelle récurrente</button>`);
@@ -897,7 +926,8 @@ function openRecurrences(){
 }
 function formRecurrence(existing){
   const isEdit=!!existing;
-  draft=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),type:"depense",montant:"",categorie:"",note:"",jour:1,actif:true,desde:ymNow()};
+  draft=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),type:"depense",montant:"",cur:"EUR",categorie:"",note:"",jour:1,actif:true,desde:ymNow()};
+  if(!draft.cur)draft.cur="EUR";
   if(!draft.categorie){const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"";}
   const body=`
     <div class="fld"><label>Type</label>
@@ -906,9 +936,10 @@ function formRecurrence(existing){
         <button data-t="revenu" class="${draft.type==="revenu"?"on":""}">Revenu<small>rentrée fixe</small></button>
       </div></div>
     <div class="frow">
-      <div class="fld"><label>Montant (€)</label><input id="rMontant" inputmode="decimal" value="${draft.montant||""}" placeholder="780"></div>
-      <div class="fld"><label>Jour du mois</label><input id="rJour" inputmode="numeric" value="${draft.jour||1}" placeholder="3"></div>
+      <div class="fld" style="flex:1.5"><label>Montant</label><input id="rMontant" inputmode="decimal" value="${draft.montant||""}" placeholder="780"></div>
+      <div class="fld" style="flex:1"><label>Devise</label><select id="rCur"><option value="EUR" ${draft.cur!=="BRL"?"selected":""}>€ Euro</option><option value="BRL" ${draft.cur==="BRL"?"selected":""}>R$ Réal</option></select></div>
     </div>
+    <div class="fld"><label>Jour du mois</label><input id="rJour" inputmode="numeric" value="${draft.jour||1}" placeholder="5"></div>
     <div class="fld"><label>Catégorie</label><div id="rCatWrap">${catPickHtml(draft.type)}</div></div>
     <div class="fld"><label>Libellé</label><input id="rNote" value="${esc(draft.note||"")}" placeholder="Ex : Loyer, Salaire, Netflix…"></div>
     <div class="fld"><label>Depuis le mois</label><input type="month" id="rDesde" value="${draft.desde||ymNow()}"></div>`;
@@ -925,6 +956,7 @@ function formRecurrence(existing){
   });
   document.getElementById("rSave").onclick=()=>{
     draft.montant=parseFloat(String(document.getElementById("rMontant").value).replace(",","."))||0;
+    draft.cur=document.getElementById("rCur").value==="BRL"?"BRL":"EUR";
     draft.jour=Math.max(1,Math.min(28,Number(document.getElementById("rJour").value)||1));
     draft.note=document.getElementById("rNote").value.trim();
     draft.desde=document.getElementById("rDesde").value||ymNow();
@@ -972,7 +1004,7 @@ function formCategorie(existing){
     <div class="fld"><label>Icône</label><div class="ico-pick" id="cIco">${CAT_ICONES.map(ic=>`<button data-i="${ic}" class="${draft.icone===ic?"on":""}">${ic}</button>`).join("")}</div></div>
     <div class="fld"><label>Couleur</label><div class="color-pick" id="cCor">${PALETTE.map(c=>`<div class="sw ${draft.cor===c?"on":""}" data-c="${c}" style="background:${c}"></div>`).join("")}</div></div>`;
   let foot=`<button class="btn btn-primary" id="cSave">${isEdit?"Enregistrer":"Créer"}</button>`;
-  if(isEdit&&!DEF_CATS.some(d=>d.id===draft.id))foot+=`<button class="btn btn-danger" id="cDel" style="margin-top:8px">Supprimer</button>`;
+  if(isEdit&&state.categories.length>1)foot+=`<button class="btn btn-danger" id="cDel" style="margin-top:8px">Supprimer la catégorie</button>`;
   openSheet(isEdit?"Modifier la catégorie":"Nouvelle catégorie",body,foot);
   const sb=document.getElementById("sheetBody");
   sb.querySelectorAll("#cType [data-t]").forEach(b=>b.onclick=()=>{draft.type=b.dataset.t;sb.querySelectorAll("#cType [data-t]").forEach(x=>x.classList.toggle("on",x.dataset.t===draft.type));});
@@ -986,7 +1018,12 @@ function formCategorie(existing){
     mark();closeSheet();openCategories();render();toast("Catégorie enregistrée ✓","green");
   };
   const del=document.getElementById("cDel");
-  if(del)del.onclick=()=>{if(!confirm("Supprimer cette catégorie ?"))return;state.categories=state.categories.filter(c=>c.id!==draft.id);mark();closeSheet();openCategories();render();toast("Catégorie supprimée");};
+  if(del)del.onclick=()=>{
+    const used=state.tx.filter(t=>t.categorie===draft.id).length+state.recurrences.filter(r=>r.categorie===draft.id).length;
+    const msg=used?`Cette catégorie est utilisée par ${used} mouvement(s)/récurrente(s). Ils resteront mais s'afficheront en « Autres ». Supprimer quand même ?`:"Supprimer cette catégorie ?";
+    if(!confirm(msg))return;
+    state.categories=state.categories.filter(c=>c.id!==draft.id);mark();closeSheet();openCategories();render();toast("Catégorie supprimée");
+  };
 }
 
 /* ---------- Config ---------- */
@@ -1038,8 +1075,8 @@ function markBackupDone(){state.lastBackup=new Date().toISOString();state.change
 function download(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 function exportJson(){download(new Blob([backupBlob()],{type:"application/json"}),`finances-backup-${todayYmd()}.json`);markBackupDone();renderBanner();toast("Sauvegarde téléchargée 💾","green");}
 function exportCsv(){
-  const head=["Date","Type","Catégorie","Libellé","Montant","Récurrent"];
-  const rows=state.tx.slice().sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(t=>[t.date,t.type==="revenu"?"Revenu":"Dépense",cat(t.categorie).nom,t.note||"",(t.type==="revenu"?"":"-")+(Number(t.montant)||0),t.recId?"oui":""]);
+  const head=["Date","Type","Catégorie","Libellé","Montant","Devise","Montant (€)","Récurrent"];
+  const rows=state.tx.slice().sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(t=>{const sgn=t.type==="revenu"?"":"-";return [t.date,t.type==="revenu"?"Revenu":"Dépense",cat(t.categorie).nom,t.note||"",sgn+(Number(t.montant)||0),t.cur||"EUR",sgn+(Math.round(toEUR(t.montant,t.cur)*100)/100),t.recId?"oui":""];});
   const csv="﻿"+[head,...rows].map(r=>r.map(c=>{c=String(c);return /[",;\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c;}).join(";")).join("\r\n");
   download(new Blob([csv],{type:"text/csv"}),`finances-${todayYmd()}.csv`);toast("CSV exporté 📊","green");
 }
@@ -1185,14 +1222,17 @@ document.getElementById("btnTheme").onclick=()=>applyTheme(document.documentElem
 if(syncEnabled()){
   setSync("syncing");
   syncPull().then(res=>{
-    topUpRecurrences();render();
-    if(res==="empty")syncPush(); // 1re fois sur cet appareil : on envoie le local au cloud
+    topUpRecurrences();
+    if(res==="empty"||_starterReplaced){ // 1re fois, ou remplacement des données d'exemple : on pousse le local
+      state.updatedAt=Date.now();save();render();syncPush();
+    }else render();
   });
 }else{
   setSync("off");
   topUpRecurrences();render();
 }
 window.addEventListener("online",()=>{if(syncEnabled())schedulePush();});
+refreshFx(); // taux EUR→BRL du jour (puis cache 6 h)
 </script>
 </body>
 </html>

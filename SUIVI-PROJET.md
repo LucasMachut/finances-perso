@@ -17,20 +17,31 @@
 - **Objectifs d'épargne** : barre de progression, % atteint, échéance, « ajouter de l'épargne », capacité d'épargne moyenne 3 mois.
 - **Graphiques d'analyse** : barres annuelles revenus vs dépenses, donut répartition dépenses (SVG), détail par catégorie, marge 12 mois.
 - **Sauvegarde/restauration JSON**, export **CSV**, réglages (prénom), bandeau « X changements depuis la dernière sauvegarde ».
+- **Synchronisation cloud (GitHub)** : données stockées dans le repo **privé** `finances-data` (`data.json` via l'API Contents). Jeton fine-grained stocké sur l'appareil (jamais dans le code public). Pull au démarrage, push auto à chaque modif, copie locale pour le hors-ligne. Indicateur de statut dans l'en-tête (☁/✓/↻/⚠) + écran de config (menu → « Sauvegarde cloud »). Résolution de conflit par `sha` + `updatedAt` (données réelles prioritaires sur l'exemple). **→ règle le problème de perte de données du localStorage.**
 - **Données d'exemple** (3 mois) au 1er lancement + bouton « Tout effacer ».
 - `manifest.json` (installable PWA), `README.md`.
 
 ---
 
+## 🆕 MAJ 13/06/2026 (soir) — double devise + vraies données
+
+- **Données fictives supprimées.** L'app démarre sur le vrai jeu (récurrentes réelles, aucune transaction d'exemple). L'ancien état d'exemple est remplacé automatiquement au prochain chargement (sur l'appareil ET au cloud).
+- **Double devise € / R$** : chaque mouvement a sa devise, conversion auto au **taux du jour** (frankfurter/ECB, cache 6 h, fallback ~5,9). Totaux affichés dans les deux devises partout (héro, résumés, donut, lignes).
+- **Récurrentes pré-remplies** : Salaire 1650 € (j.30), Loyer 3100 R$, Adobe 350 R$, Free 20 €, Mutuelle 20 €.
+  - ⚠️ **Jour de prélèvement** : seul le salaire (30) était précisé. Loyer/Adobe/Free/Mutuelle sont mis au **5** par défaut → **à ajuster** dans Menu → Charges récurrentes.
+- **Catégories** : ajout **et suppression de n'importe quelle catégorie** (avertissement si utilisée → les mouvements basculent en « Autres »).
+- **Classement ponctuel/récurrent** dès la saisie d'un mouvement (choix Ponctuel / Tous les mois).
+
 ## ❓ Questions pour Lucas (à répondre demain)
 
-1. **Devise** : j'ai mis l'**euro (€)**. C'est bon ou tu veux autre chose / multi-devises ?
-2. **Salaire / revenus** : j'ai créé une récurrente « Salaire 2200 € » en exemple. Quels sont tes vrais revenus récurrents (montant, jour du mois) ? Salaire fixe + vacations LSF variables ?
-3. **Charges fixes réelles** : loyer, abonnements, assurances, crédits… ? Donne-moi la liste avec montants + jour de prélèvement, je peux les pré-remplir.
+1. **Jours de prélèvement** loyer / Adobe / Free / mutuelle ? (mis au 5 par défaut)
+2. **Salaire** : 1650 € le 30 — fixe tous les mois ? Et des **vacations LSF** variables à ajouter en revenus ?
+3. **Autres charges fixes réelles** (assurances, crédits, impôts, autres abos…) à ajouter ?
 4. **Budgets par catégorie** : veux-tu fixer un **budget mensuel par catégorie** (ex : 300 €/courses) avec alerte quand tu dépasses ? Pas encore fait — gros plus si utile.
 5. **Objectifs** : quels objectifs d'épargne réels (nom, montant cible, déjà épargné, échéance) ?
 6. **Lien avec l'app Facturation LSF** : faut-il **importer automatiquement** tes revenus depuis l'app de facturation, ou tu saisis les revenus à la main ici ?
 7. **Solde de compte** : veux-tu suivre un **solde de compte bancaire réel** (point de départ + variations) en plus de la marge mensuelle ?
+   - *Stockage : réglé.* On est partis sur la **sync cloud via ton GitHub privé** (repo `finances-data`). Reste à valider que ça te convient à l'usage (sync multi-appareils, expiration du jeton à renouveler ~1 an).
 8. **Vue annuelle / patrimoine** : besoin d'un onglet bilan annuel (total épargné sur l'année, évolution du patrimoine) ?
 9. **Récurrentes variables** : certaines charges varient (élec, eau). Garder un montant estimé modifiable chaque mois, ou autre logique ?
 10. **Catégories** : les 13 catégories par défaut te conviennent ? À ajouter/renommer/supprimer ?

@@ -19,9 +19,17 @@ Ouvrir `finances.html` dans un navigateur (mobile ou desktop). Les données sont
 
 > Sur iPhone : ouvrir dans Safari → Partager → « Sur l'écran d'accueil » pour l'utiliser comme une app.
 
-## Données d'exemple
+## Double devise (€ / R$)
 
-Au premier lancement, des **données d'exemple** sont affichées (bandeau cyan en haut) pour visualiser les graphiques. Bouton **« Tout effacer »** pour repartir de zéro.
+Chaque mouvement est saisi dans sa devise (**euro** ou **réal brésilien**). L'app convertit tout automatiquement au **taux du jour** (EUR→BRL, source ECB/frankfurter, mise en cache 6 h, fallback hors-ligne) et affiche les totaux dans les deux devises.
+
+## Jeu de départ
+
+Aucune donnée fictive. L'app démarre avec les **charges récurrentes réelles** déjà saisies (salaire, loyer, Adobe, Free, mutuelle). Tout le reste se remplit au fil de l'eau. Catégories ajoutables/supprimables ; chaque saisie peut être classée **ponctuelle ou récurrente**.
+
+## Synchronisation cloud
+
+Données stockées dans un repo GitHub **privé** (`finances-data/data.json`). Jeton fine-grained collé une fois dans l'app (menu ☁), jamais publié. Pull au démarrage, push auto à chaque modif, copie locale pour le hors-ligne.
 
 ## Tech
 
