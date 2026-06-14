@@ -378,7 +378,7 @@
    Même logique que "Pulso pour Richard" : 1 fichier, localStorage, backup JSON
    ===================================================================== */
 const KEY="finances_perso_v1";
-const APP_VERSION="1.8";
+const APP_VERSION="1.9";
 const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
 const MOIS=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
 const JOURS=["dim","lun","mar","mer","jeu","ven","sam"];
@@ -485,13 +485,21 @@ function cat(id){return state.categories.find(c=>c.id===id)||{id,nom:"Autres",co
 function userNom(){return (state.config&&state.config.nom)||"Lucas";}
 function greeting(){const h=new Date().getHours();return h<12?"Bonjour":h<18?"Bon après-midi":"Bonsoir";}
 
-/* ---------- moteur de récurrences (génère les transactions jusqu'au mois courant) ---------- */
-function topUpRecurrences(){
-  const cur=ymNow();let added=false;
+/* ---------- moteur de récurrences : 1 occurrence par mois ----------
+   de `desde` jusqu'à un horizon = max(mois courant + 18 mois, mois consulté),
+   borné par `fin` (mois de fin) si défini. Ne duplique jamais une occurrence existante. */
+const REC_HORIZON_MONTHS=18;
+function topUpRecurrences(uptoYm){
+  const cur=ymNow();
+  let horizon=shiftMonth(cur,REC_HORIZON_MONTHS);
+  if(uptoYm&&uptoYm>horizon)horizon=uptoYm; // comparaison lexicographique sur "YYYY-MM" (ok car zéro-paddé)
+  let added=false;
   (state.recurrences||[]).forEach(r=>{
     if(!r.actif)return;
+    let end=horizon;
+    if(r.fin&&r.fin<end)end=r.fin;          // date de fin éventuelle
     let ym=r.desde||cur,guard=0;
-    while(ym<=cur&&guard<360){
+    while(ym<=end&&guard<600){
       if(!state.tx.some(t=>t.recId===r.id&&(t.date||"").startsWith(ym))){
         const day=Math.min(Number(r.jour)||1,daysInMonth(ym));
         state.tx.push({id:uid(),type:r.type,date:ym+"-"+String(day).padStart(2,"0"),montant:Number(r.montant)||0,cur:r.cur||"EUR",categorie:r.categorie,note:r.note||"",recId:r.id});
@@ -646,7 +654,7 @@ function renderAccueil(){
 function renderMouvements(){
   const el=document.getElementById("page-mouvements");
   if(!ui.finMonth)ui.finMonth=ymNow();
-  const ym=ui.finMonth;const s=statsMois(ym);
+  const ym=ui.finMonth;topUpRecurrences(ym);const s=statsMois(ym);
   let list=txMois(ym);
   if(ui.mvFilter!=="tout")list=list.filter(t=>t.type===ui.mvFilter);
   list.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
@@ -698,7 +706,7 @@ function donutSvg(segs){
 function renderAnalyse(){
   const el=document.getElementById("page-analyse");
   if(!ui.finMonth)ui.finMonth=ymNow();
-  const ym=ui.finMonth;const s=statsMois(ym);
+  const ym=ui.finMonth;topUpRecurrences(ym.slice(0,4)+"-12");const s=statsMois(ym);
   const year=Number(ym.slice(0,4));const an=statsAnnee(year);
   const maxBar=Math.max(1,...an.map(m=>Math.max(m.revenus,m.depenses)));
   const curM=Number(ym.slice(5,7))-1;
@@ -997,7 +1005,7 @@ function openRecurrences(){
     <div class="rec-row">
       <div class="tx-ico" style="background:${ct.cor}">${ct.icone}</div>
       <div class="rbody" data-redit="${r.id}"><div class="rnm">${esc(r.note||ct.nom)}</div>
-        <div class="rmeta">${r.type==="revenu"?"Revenu":"Dépense"} · le ${r.jour} du mois · ${esc(ct.nom)} · ≈ ${r.cur==="BRL"?fmtCur(toEUR(r.montant,"BRL"),"EUR"):fmtCur(eurToBrl(r.montant),"BRL")}</div></div>
+        <div class="rmeta">${r.type==="revenu"?"Revenu":"Dépense"} · le ${r.jour} du mois · ${esc(ct.nom)}${r.fin?" · jusqu'à "+moisLabel(r.fin):""} · ≈ ${r.cur==="BRL"?fmtCur(toEUR(r.montant,"BRL"),"EUR"):fmtCur(eurToBrl(r.montant),"BRL")}</div></div>
       <div class="ramt" style="color:${r.type==="revenu"?'var(--green)':'var(--red)'}">${r.type==="revenu"?"+":"−"}${fmtCur(r.montant,r.cur)}</div>
       <div class="toggle ${r.actif?"on":""}" data-rtog="${r.id}"></div>
     </div>`;}).join(""):`<div class="empty" style="padding:30px"><div class="ico">↻</div><h3>Aucune récurrente</h3><p>Loyer, salaire, abonnements…</p></div>`;
@@ -1025,7 +1033,10 @@ function formRecurrence(existing){
     <div class="fld"><label>Jour du mois</label><input id="rJour" inputmode="numeric" value="${draft.jour||1}" placeholder="5"></div>
     <div class="fld"><label>Catégorie</label><div id="rCatWrap">${catPickHtml(draft.type)}</div></div>
     <div class="fld"><label>Libellé</label><input id="rNote" value="${esc(draft.note||"")}" placeholder="Ex : Loyer, Salaire, Netflix…"></div>
-    <div class="fld"><label>Depuis le mois</label><input type="month" id="rDesde" value="${draft.desde||ymNow()}"></div>`;
+    <div class="frow">
+      <div class="fld"><label>Depuis le mois</label><input type="month" id="rDesde" value="${draft.desde||ymNow()}"></div>
+      <div class="fld"><label>Jusqu'au mois <span class="opt">(optionnel)</span></label><input type="month" id="rFin" value="${draft.fin||''}"></div>
+    </div>`;
   let foot=`<button class="btn btn-primary" id="rSave">${isEdit?"Enregistrer":"Créer"}</button>`;
   if(isEdit)foot+=`<button class="btn btn-danger" id="rDel" style="margin-top:8px">Supprimer</button>`;
   openSheet(isEdit?"Modifier la récurrente":"Nouvelle récurrente",body,foot);
@@ -1043,6 +1054,7 @@ function formRecurrence(existing){
     draft.jour=Math.max(1,Math.min(28,Number(document.getElementById("rJour").value)||1));
     draft.note=document.getElementById("rNote").value.trim();
     draft.desde=document.getElementById("rDesde").value||ymNow();
+    draft.fin=document.getElementById("rFin").value||"";
     if(!draft.montant){toast("Renseignez un montant","amber");return;}
     if(!draft.categorie){const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"autres";}
     const idx=state.recurrences.findIndex(r=>r.id===draft.id);
