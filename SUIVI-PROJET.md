@@ -71,6 +71,14 @@
 - **Repère « rythme du mois »** : un curseur sur la jauge marque le % du mois écoulé (ex. jour 14 ≈ 47 %). Si la barre dépasse le repère → on dépense trop vite. Bandeau récap en tête : total dépensé / budget + % du mois écoulé.
 - **Catégories suivies modifiables** : chaque budget est relié à des catégories de dépense (multi-sélection dans le formulaire) qui alimentent sa jauge. Mappings par défaut (Fixes→Logement+Abos, Courses→Courses, Restos+sorties→Restaurants, Transport perso→Transport, Shopping→Shopping, Santé→Santé, Sport→Loisirs ; Transport pro à associer). Backfill auto par `id` pour les budgets déjà créés en v2.0. Les récurrentes du mois sont matérialisées avant le calcul.
 
+## 🆕 MAJ 14/06/2026 (nuit) — budgets 1:1 avec catégories dédiées (v2.2)
+
+- **Problème v2.1** : les jauges devinaient le mapping budget→catégorie (Sport→Loisirs ⇒ Sport en rouge à cause des sorties ; total budget ≠ total dépenses accueil).
+- **Catégories dédiées créées** : **Fixes 📌, Sport 🏃, Transport perso 🚗, Transport pro 📷** (ajout idempotent). Chaque budget est désormais relié **1:1** à sa catégorie (Restos + sorties → Restaurants + Loisirs).
+- **Charges fixes rattachées à « Fixes »** : migration unique (`_budgetCatsV2`) qui re-catégorise les récurrentes/tx dont la note contient loyer/Adobe/Free/mutuelle/Google One → catégorie `fixes` (⇒ jauge Fixes = 644 €). Idem salle de sport (sport/gym/fitness/basic fit/muscu) → `sport`. Seed mis à jour (5 charges fixes en `fixes`, dont Google One 20 €).
+- **Réconciliation des onglets** : le récap budget affiche maintenant *Dépensé sur postes suivis* + *Hors budgets (impôts, autres…)* + *Total dépenses du mois* — ce dernier = le total de l'accueil. Plus d'écart inexpliqué.
+- ⚠️ Les dépenses **ponctuelles** déjà saisies dans Sport/Transport perso/pro restent à reclasser à la main dans les nouvelles catégories (la migration ne touche que les récurrentes identifiées par mot-clé).
+
 ## ❓ Questions pour Lucas (à répondre demain)
 
 1. **Jours de prélèvement** loyer / Adobe / Free / mutuelle ? (mis au 5 par défaut)

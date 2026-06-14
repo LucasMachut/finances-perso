@@ -384,21 +384,29 @@
    Même logique que "Pulso pour Richard" : 1 fichier, localStorage, backup JSON
    ===================================================================== */
 const KEY="finances_perso_v1";
-const APP_VERSION="2.1";
+const APP_VERSION="2.2";
 const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
 const MOIS=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
 const JOURS=["dim","lun","mar","mer","jeu","ven","sam"];
 const PALETTE=["#16D1FF","#3b82f6","#2FE6A6","#f59e0b","#ec4899","#8b5cf6","#ef4444","#06b6d4","#a855f7","#84cc16","#64748b","#FFB020"];
 
+/* catégories dédiées aux objectifs de budget (1 budget ↔ 1 catégorie) */
+const BUDGET_DEDICATED_CATS=[
+  {id:"fixes",          nom:"Fixes",           cor:"#3b82f6",icone:"📌",type:"depense"},
+  {id:"sport",          nom:"Sport",           cor:"#2FE6A6",icone:"🏃",type:"depense"},
+  {id:"transport_perso",nom:"Transport perso", cor:"#f59e0b",icone:"🚗",type:"depense"},
+  {id:"transport_pro",  nom:"Transport pro",   cor:"#06b6d4",icone:"📷",type:"depense"},
+];
 /* catégories par défaut (id stables) */
 const DEF_CATS=[
-  {id:"logement",nom:"Logement",cor:"#3b82f6",icone:"🏠",type:"depense"},
-  {id:"courses",nom:"Courses",cor:"#2FE6A6",icone:"🛒",type:"depense"},
-  {id:"transport",nom:"Transport",cor:"#f59e0b",icone:"🚗",type:"depense"},
+  {id:"logement",nom:"Logement",cor:"#1d4ed8",icone:"🏠",type:"depense"},
+  ...BUDGET_DEDICATED_CATS,
+  {id:"courses",nom:"Courses",cor:"#84cc16",icone:"🛒",type:"depense"},
+  {id:"transport",nom:"Transport",cor:"#fb923c",icone:"🚙",type:"depense"},
   {id:"restau",nom:"Restaurants",cor:"#ec4899",icone:"🍽️",type:"depense"},
   {id:"loisirs",nom:"Loisirs",cor:"#8b5cf6",icone:"🎮",type:"depense"},
   {id:"sante",nom:"Santé",cor:"#ef4444",icone:"💊",type:"depense"},
-  {id:"abos",nom:"Abonnements",cor:"#06b6d4",icone:"📱",type:"depense"},
+  {id:"abos",nom:"Abonnements",cor:"#0891b2",icone:"📱",type:"depense"},
   {id:"impots",nom:"Impôts & taxes",cor:"#64748b",icone:"🏛️",type:"depense"},
   {id:"shopping",nom:"Shopping",cor:"#a855f7",icone:"🛍️",type:"depense"},
   {id:"autres",nom:"Autres",cor:"#94a3b8",icone:"📦",type:"depense"},
@@ -413,15 +421,23 @@ const BUDGET_ICONES=["📌","🏃","🛒","🍽️","🚗","📷","🛍️","�
 /* objectifs de budget par défaut (enveloppes mensuelles, modifiables) — montants en €
    cats = catégories de dépense suivies pour la jauge dépensé/budget (modifiables) */
 const DEF_BUDGETS=[
-  {id:"b_fixes",   nom:"Fixes",                   montant:644,cur:"EUR",icone:"📌",cor:"#3b82f6",detail:"Loyer 525, Adobe 59, Free 20, mutuelle 20, Google One 20",cats:["logement","abos"]},
-  {id:"b_sport",   nom:"Sport",                   montant:25, cur:"EUR",icone:"🏃",cor:"#2FE6A6",detail:"",cats:["loisirs"]},
+  {id:"b_fixes",   nom:"Fixes",                   montant:644,cur:"EUR",icone:"📌",cor:"#3b82f6",detail:"Loyer 525, Adobe 59, Free 20, mutuelle 20, Google One 20",cats:["fixes"]},
+  {id:"b_sport",   nom:"Sport",                   montant:25, cur:"EUR",icone:"🏃",cor:"#2FE6A6",detail:"",cats:["sport"]},
   {id:"b_courses", nom:"Courses",                 montant:300,cur:"EUR",icone:"🛒",cor:"#84cc16",detail:"",cats:["courses"]},
-  {id:"b_restos",  nom:"Restos + sorties",        montant:120,cur:"EUR",icone:"🍽️",cor:"#ec4899",detail:"",cats:["restau"]},
-  {id:"b_tperso",  nom:"Transport perso (soirées)",montant:60, cur:"EUR",icone:"🚗",cor:"#f59e0b",detail:"",cats:["transport"]},
-  {id:"b_tpro",    nom:"Transport pro (shoot)",   montant:51, cur:"EUR",icone:"📷",cor:"#06b6d4",detail:"",cats:[]},
+  {id:"b_restos",  nom:"Restos + sorties",        montant:120,cur:"EUR",icone:"🍽️",cor:"#ec4899",detail:"",cats:["restau","loisirs"]},
+  {id:"b_tperso",  nom:"Transport perso (soirées)",montant:60, cur:"EUR",icone:"🚗",cor:"#f59e0b",detail:"",cats:["transport_perso"]},
+  {id:"b_tpro",    nom:"Transport pro (shoot)",   montant:51, cur:"EUR",icone:"📷",cor:"#06b6d4",detail:"",cats:["transport_pro"]},
   {id:"b_shopping",nom:"Shopping",                montant:50, cur:"EUR",icone:"🛍️",cor:"#a855f7",detail:"",cats:["shopping"]},
   {id:"b_sante",   nom:"Santé courante",          montant:50, cur:"EUR",icone:"💊",cor:"#ef4444",detail:"",cats:["sante"]},
 ];
+/* mappings budget → catégorie appliqués une fois aux états existants (corrige les devinettes v2.1) */
+const BUDGET_CATS_V2={b_fixes:["fixes"],b_sport:["sport"],b_courses:["courses"],b_restos:["restau","loisirs"],b_tperso:["transport_perso"],b_tpro:["transport_pro"],b_shopping:["shopping"],b_sante:["sante"]};
+/* mots-clés des charges fixes (pour rattacher loyer/Adobe/Free/mutuelle/Google One à la catégorie Fixes) */
+const FIXED_KEYWORDS=["loyer","adobe","free","mutuelle","google"];
+const isFixedCharge=note=>{const n=(note||"").toLowerCase();return FIXED_KEYWORDS.some(k=>n.includes(k));};
+/* mots-clés salle de sport (rattachement à la catégorie Sport) */
+const SPORT_KEYWORDS=["sport","gym","fitness","basic fit","basicfit","muscu"];
+const isSportCharge=note=>{const n=(note||"").toLowerCase();return SPORT_KEYWORDS.some(k=>n.includes(k));};
 
 let _starterReplaced=false;
 let state=load();
@@ -434,12 +450,22 @@ function migrate(s){
   if(!s.tx)s.tx=[];
   if(!s.recurrences)s.recurrences=[];
   if(!s.categories||!s.categories.length)s.categories=JSON.parse(JSON.stringify(DEF_CATS));
+  // catégories dédiées aux budgets (Fixes, Sport, Transport perso/pro) — ajout idempotent
+  BUDGET_DEDICATED_CATS.forEach(nc=>{if(!s.categories.some(c=>c.id===nc.id))s.categories.push(Object.assign({},nc));});
   if(!s.objectifs)s.objectifs=[];
   if(!s.budgets)s.budgets=JSON.parse(JSON.stringify(DEF_BUDGETS));
   s.budgets.forEach(b=>{
     if(!b.cur)b.cur="EUR";
     if(!Array.isArray(b.cats)){const def=DEF_BUDGETS.find(d=>d.id===b.id);b.cats=def?def.cats.slice():[];}
   });
+  // v2.2 : applique une fois les mappings 1:1 corrigés + rattache les charges fixes à la catégorie « Fixes »
+  if(!s._budgetCatsV2){
+    s.budgets.forEach(b=>{if(BUDGET_CATS_V2[b.id])b.cats=BUDGET_CATS_V2[b.id].slice();});
+    const recat=note=>isFixedCharge(note)?"fixes":(isSportCharge(note)?"sport":null);
+    (s.recurrences||[]).forEach(r=>{if(r.type==="depense"){const c=recat(r.note);if(c)r.categorie=c;}});
+    (s.tx||[]).forEach(t=>{if(t.type==="depense"&&t.recId){const c=recat(t.note);if(c)t.categorie=c;}});
+    s._budgetCatsV2=true;
+  }
   if(!s.config)s.config={nom:"Lucas"};
   if(!("lastBackup" in s))s.lastBackup=null;
   if(!("demo" in s))s.demo=false;
@@ -460,13 +486,14 @@ function seed(){
   const cats=JSON.parse(JSON.stringify(DEF_CATS));
   const m=ymNow();
   const rec=[
-    {id:uid(),type:"revenu", montant:1650,cur:"EUR",categorie:"salaire", note:"Salaire", jour:30,actif:true,desde:m},
-    {id:uid(),type:"depense",montant:3100,cur:"BRL",categorie:"logement",note:"Loyer",   jour:5, actif:true,desde:m},
-    {id:uid(),type:"depense",montant:350, cur:"BRL",categorie:"abos",    note:"Adobe",   jour:5, actif:true,desde:m},
-    {id:uid(),type:"depense",montant:20,  cur:"EUR",categorie:"abos",    note:"Free",    jour:5, actif:true,desde:m},
-    {id:uid(),type:"depense",montant:20,  cur:"EUR",categorie:"sante",   note:"Mutuelle",jour:5, actif:true,desde:m},
+    {id:uid(),type:"revenu", montant:1650,cur:"EUR",categorie:"salaire",note:"Salaire",   jour:30,actif:true,desde:m},
+    {id:uid(),type:"depense",montant:3100,cur:"BRL",categorie:"fixes",  note:"Loyer",     jour:5, actif:true,desde:m},
+    {id:uid(),type:"depense",montant:350, cur:"BRL",categorie:"fixes",  note:"Adobe",     jour:5, actif:true,desde:m},
+    {id:uid(),type:"depense",montant:20,  cur:"EUR",categorie:"fixes",  note:"Free",      jour:5, actif:true,desde:m},
+    {id:uid(),type:"depense",montant:20,  cur:"EUR",categorie:"fixes",  note:"Mutuelle",  jour:5, actif:true,desde:m},
+    {id:uid(),type:"depense",montant:20,  cur:"EUR",categorie:"fixes",  note:"Google One",jour:5, actif:true,desde:m},
   ];
-  return{tx:[],recurrences:rec,categories:cats,objectifs:[],budgets:JSON.parse(JSON.stringify(DEF_BUDGETS)),config:{nom:"Lucas"},fx:{rate:null,ts:0},lastBackup:null,demo:false,changes:0,updatedAt:0};
+  return{tx:[],recurrences:rec,categories:cats,objectifs:[],budgets:JSON.parse(JSON.stringify(DEF_BUDGETS)),_budgetCatsV2:true,config:{nom:"Lucas"},fx:{rate:null,ts:0},lastBackup:null,demo:false,changes:0,updatedAt:0};
 }
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Erreur d'enregistrement","amber");}}
 function mark(){state.changes=(state.changes||0)+1;state.updatedAt=Date.now();save();schedulePush();}
@@ -841,12 +868,17 @@ function renderObjectifs(){
   const totPct=totBud>0?Math.round(totSpent/totBud*100):0;
   const elapsed=monthElapsedFrac(bym);
   const totCol=totPct>=100?"var(--red)":(totPct>elapsed*100+8?"var(--amber)":"var(--green)");
+  const allDep=statsMois(bym).depenses;            // total dépenses du mois (toutes catégories — cohérent avec l'accueil)
+  const hors=Math.max(0,allDep-totSpent);          // dépenses hors postes budgétés (impôts, autres…)
   html+=`<div class="section-title">Objectifs de budget <span class="count">${buds.length}</span></div>`;
   if(buds.length){
-    html+=`<div class="card" style="padding:14px 16px 6px;margin-bottom:11px">
+    html+=`<div class="card" style="padding:14px 16px 8px;margin-bottom:11px">
       <div class="info-line" style="border:none;padding:0 0 2px"><span class="k" style="font-weight:800;color:var(--ink)">${moisLabel(bym)}</span><span class="v" style="color:${totCol}">${money0(totSpent)} / ${money0(totBud)}</span></div>
       <div class="bgauge"><i style="width:${Math.min(100,totPct)}%;background:${totCol}"></i><div class="mark" style="left:${Math.round(Math.min(100,elapsed*100))}%" title="rythme du mois (jour ${new Date().getDate()})"></div></div>
       <div class="goal-foot"><span style="color:${totCol}">${totPct}% du budget · ${Math.round(elapsed*100)}% du mois écoulé</span><span>${dualEUR(totBud-totSpent>=0?totBud-totSpent:0)} restant</span></div>
+      <div class="info-line" style="margin-top:10px"><span class="k">Dépensé sur postes suivis</span><span class="v">${dualEUR(totSpent)}</span></div>
+      <div class="info-line"><span class="k">Hors budgets (impôts, autres…)</span><span class="v">${dualEUR(hors)}</span></div>
+      <div class="info-line"><span class="k" style="font-weight:800;color:var(--ink)">Total dépenses du mois</span><span class="v" style="font-weight:800">${dualEUR(allDep)}</span></div>
     </div>`;
     html+=buds.map(b=>budgetCard(b,bym)).join("");
   }else{
