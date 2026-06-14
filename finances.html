@@ -227,6 +227,17 @@
   .progress > i{display:block;height:100%;border-radius:99px;transition:width .4s}
   .goal-foot{display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink-faint);font-weight:700;margin-top:8px;font-variant-numeric:tabular-nums}
 
+  /* ---------- Objectifs de budget ---------- */
+  .bud-row{display:flex;align-items:center;gap:12px;padding:11px 2px;border-bottom:1px solid var(--line);cursor:pointer}
+  .bud-row:last-child{border-bottom:none}
+  .bud-row:active{opacity:.6}
+  .bud-ico{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;color:#fff}
+  .bud-body{flex:1;min-width:0}
+  .bud-nm{font-weight:800;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bud-det{font-size:11.5px;color:var(--ink-faint);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bud-amt{text-align:right;font-weight:900;font-size:15px;font-variant-numeric:tabular-nums;flex-shrink:0}
+  .bud-brl{font-size:11.5px;color:var(--ink-faint);font-weight:700;margin-top:1px}
+
   /* ---------- Récurrentes ---------- */
   .rec-row{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:9px;box-shadow:var(--shadow)}
   .rec-row .rbody{flex:1;min-width:0}
@@ -378,7 +389,7 @@
    Même logique que "Pulso pour Richard" : 1 fichier, localStorage, backup JSON
    ===================================================================== */
 const KEY="finances_perso_v1";
-const APP_VERSION="1.9";
+const APP_VERSION="2.0";
 const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
 const MOIS=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
 const JOURS=["dim","lun","mar","mer","jeu","ven","sam"];
@@ -402,6 +413,19 @@ const DEF_CATS=[
 ];
 const CAT_ICONES=["🏠","🛒","🚗","🍽️","🎮","💊","📱","🏛️","🛍️","📦","💼","💻","➕","🎓","🐶","✈️","🎁","💡","💳","🏦"];
 const GOAL_ICONES=["🎯","✈️","🏖️","🚗","🏠","💍","🎓","💻","📷","🛟","🎄","💰","🏔️","🛵","🎸","👶"];
+const BUDGET_ICONES=["📌","🏃","🛒","🍽️","🚗","📷","🛍️","💊","🏠","📱","🎮","✈️","💡","🎁","💳","💰"];
+
+/* objectifs de budget par défaut (enveloppes mensuelles, modifiables) — montants en € */
+const DEF_BUDGETS=[
+  {id:"b_fixes",   nom:"Fixes",                   montant:644,cur:"EUR",icone:"📌",cor:"#3b82f6",detail:"Loyer 525, Adobe 59, Free 20, mutuelle 20, Google One 20"},
+  {id:"b_sport",   nom:"Sport",                   montant:25, cur:"EUR",icone:"🏃",cor:"#2FE6A6",detail:""},
+  {id:"b_courses", nom:"Courses",                 montant:300,cur:"EUR",icone:"🛒",cor:"#84cc16",detail:""},
+  {id:"b_restos",  nom:"Restos + sorties",        montant:120,cur:"EUR",icone:"🍽️",cor:"#ec4899",detail:""},
+  {id:"b_tperso",  nom:"Transport perso (soirées)",montant:60, cur:"EUR",icone:"🚗",cor:"#f59e0b",detail:""},
+  {id:"b_tpro",    nom:"Transport pro (shoot)",   montant:51, cur:"EUR",icone:"📷",cor:"#06b6d4",detail:""},
+  {id:"b_shopping",nom:"Shopping",                montant:50, cur:"EUR",icone:"🛍️",cor:"#a855f7",detail:""},
+  {id:"b_sante",   nom:"Santé courante",          montant:50, cur:"EUR",icone:"💊",cor:"#ef4444",detail:""},
+];
 
 let _starterReplaced=false;
 let state=load();
@@ -415,6 +439,8 @@ function migrate(s){
   if(!s.recurrences)s.recurrences=[];
   if(!s.categories||!s.categories.length)s.categories=JSON.parse(JSON.stringify(DEF_CATS));
   if(!s.objectifs)s.objectifs=[];
+  if(!s.budgets)s.budgets=JSON.parse(JSON.stringify(DEF_BUDGETS));
+  s.budgets.forEach(b=>{if(!b.cur)b.cur="EUR";});
   if(!s.config)s.config={nom:"Lucas"};
   if(!("lastBackup" in s))s.lastBackup=null;
   if(!("demo" in s))s.demo=false;
@@ -441,7 +467,7 @@ function seed(){
     {id:uid(),type:"depense",montant:20,  cur:"EUR",categorie:"abos",    note:"Free",    jour:5, actif:true,desde:m},
     {id:uid(),type:"depense",montant:20,  cur:"EUR",categorie:"sante",   note:"Mutuelle",jour:5, actif:true,desde:m},
   ];
-  return{tx:[],recurrences:rec,categories:cats,objectifs:[],config:{nom:"Lucas"},fx:{rate:null,ts:0},lastBackup:null,demo:false,changes:0,updatedAt:0};
+  return{tx:[],recurrences:rec,categories:cats,objectifs:[],budgets:JSON.parse(JSON.stringify(DEF_BUDGETS)),config:{nom:"Lucas"},fx:{rate:null,ts:0},lastBackup:null,demo:false,changes:0,updatedAt:0};
 }
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Erreur d'enregistrement","amber");}}
 function mark(){state.changes=(state.changes||0)+1;state.updatedAt=Date.now();save();schedulePush();}
@@ -808,6 +834,18 @@ function renderObjectifs(){
       <div class="sum"><div class="lbl">Objectif total</div><div class="val">${money(totCible)}</div><div style="font-size:12.5px;color:var(--ink-faint);font-weight:700;margin-top:3px">${fmtCur(eurToBrl(totCible),'BRL')}</div></div>
       <div class="sum full"><div class="lbl">Capacité d'épargne / mois (moy. 3 mois)</div><div class="val" style="color:${capacite>=0?'var(--green)':'var(--red)'};font-size:18px">${signedDualEUR(capacite)}</div></div>
     </div>`;
+  // ---- Objectifs de budget (enveloppes mensuelles modifiables) ----
+  const buds=state.budgets||[];
+  const totBud=buds.reduce((a,b)=>a+toEUR(b.montant,b.cur),0);
+  html+=`<div class="section-title">Objectifs de budget <span class="count">${buds.length}</span><span class="right">${dualEUR(totBud)}</span></div>`;
+  if(buds.length){
+    html+=`<div class="card" style="padding:8px 14px">`+buds.map(b=>budgetRow(b)).join("")+`</div>`;
+  }else{
+    html+=`<div class="empty" style="padding:24px"><div class="ico">📌</div><h3>Aucun budget</h3><p>Fixez un budget mensuel par poste (fixes, courses, sorties…).</p></div>`;
+  }
+  html+=`<button class="btn btn-ghost" id="addBud" style="margin:2px 0 16px">＋ Nouveau budget</button>`;
+
+  // ---- Objectifs d'épargne ----
   if(objs.length){
     html+=`<div class="section-title">Mes objectifs <span class="count">${objs.length}</span></div>`;
     html+=objs.map(o=>goalCard(o,false)).join("");
@@ -817,7 +855,18 @@ function renderObjectifs(){
   html+=`<button class="btn btn-primary" id="addObj" style="margin-top:6px">＋ Nouvel objectif</button>`;
   el.innerHTML=html;
   el.querySelectorAll("[data-goal]").forEach(c=>c.onclick=()=>formObjectif(objs.find(o=>o.id===c.dataset.goal)));
+  el.querySelectorAll("[data-bud]").forEach(c=>c.onclick=()=>formBudget(buds.find(b=>b.id===c.dataset.bud)));
   document.getElementById("addObj").onclick=()=>formObjectif(null);
+  document.getElementById("addBud").onclick=()=>formBudget(null);
+}
+/* ligne d'un objectif de budget : poste + montant € · R$ (touchez pour modifier) */
+function budgetRow(b){
+  const eur=toEUR(b.montant,b.cur);
+  return `<div class="bud-row" data-bud="${b.id}">
+    <div class="bud-ico" style="background:${b.cor||'#3b82f6'}">${b.icone||"📌"}</div>
+    <div class="bud-body"><div class="bud-nm">${esc(b.nom)}</div>${b.detail?`<div class="bud-det">${esc(b.detail)}</div>`:""}</div>
+    <div class="bud-amt">${money0(eur)}<div class="bud-brl">${fmtCur(eurToBrl(eur),'BRL')}</div></div>
+  </div>`;
 }
 
 /* =====================================================================
@@ -996,6 +1045,40 @@ function formObjectif(existing){
   };
   const del=document.getElementById("oDel");
   if(del)del.onclick=()=>{if(!confirm("Supprimer cet objectif ?"))return;state.objectifs=state.objectifs.filter(o=>o.id!==draft.id);mark();closeSheet();render();toast("Objectif supprimé");};
+}
+
+/* ---------- Objectif de budget (enveloppe mensuelle modifiable) ---------- */
+function formBudget(existing){
+  const isEdit=!!existing;
+  draft=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),nom:"",montant:"",cur:"EUR",icone:"📌",cor:PALETTE[1],detail:""};
+  const body=`
+    <div class="fld"><label>Poste de budget</label><input id="bNom" value="${esc(draft.nom)}" placeholder="Ex : Courses, Sorties…"></div>
+    <div class="frow">
+      <div class="fld" style="flex:1.5"><label>Montant mensuel</label><input id="bMontant" inputmode="decimal" value="${draft.montant||""}" placeholder="100"></div>
+      <div class="fld" style="flex:1"><label>Devise</label><select id="bCur"><option value="EUR" ${draft.cur!=="BRL"?"selected":""}>€ Euro</option><option value="BRL" ${draft.cur==="BRL"?"selected":""}>R$ Réal</option></select></div>
+    </div>
+    <div class="fld"><label>Détail <span class="opt">(optionnel)</span></label><input id="bDetail" value="${esc(draft.detail||"")}" placeholder="Ex : loyer 525, Adobe 59…"></div>
+    <div class="fld"><label>Icône</label><div class="ico-pick" id="bIco">${BUDGET_ICONES.map(ic=>`<button data-i="${ic}" class="${draft.icone===ic?"on":""}">${ic}</button>`).join("")}</div></div>
+    <div class="fld"><label>Couleur</label><div class="color-pick" id="bCor">${PALETTE.map(c=>`<div class="sw ${draft.cor===c?"on":""}" data-c="${c}" style="background:${c}"></div>`).join("")}</div></div>`;
+  let foot=`<button class="btn btn-primary" id="bSave">${isEdit?"Enregistrer":"Créer le budget"}</button>`;
+  if(isEdit)foot+=`<div class="btn-row" style="margin-top:8px"><button class="btn btn-danger" id="bDel">Supprimer</button></div>`;
+  openSheet(isEdit?"Modifier le budget":"Nouvel objectif de budget",body,foot);
+  const sb=document.getElementById("sheetBody");
+  sb.querySelectorAll("#bIco [data-i]").forEach(b=>b.onclick=()=>{draft.icone=b.dataset.i;sb.querySelectorAll("#bIco [data-i]").forEach(x=>x.classList.toggle("on",x.dataset.i===draft.icone));});
+  sb.querySelectorAll("#bCor [data-c]").forEach(b=>b.onclick=()=>{draft.cor=b.dataset.c;sb.querySelectorAll("#bCor .sw").forEach(x=>x.classList.toggle("on",x.dataset.c===draft.cor));});
+  document.getElementById("bSave").onclick=()=>{
+    draft.nom=document.getElementById("bNom").value.trim();
+    draft.montant=parseFloat(String(document.getElementById("bMontant").value).replace(",","."))||0;
+    draft.cur=document.getElementById("bCur").value;
+    draft.detail=document.getElementById("bDetail").value.trim();
+    if(!draft.nom||!draft.montant){toast("Renseignez un poste et un montant","amber");return;}
+    if(!state.budgets)state.budgets=[];
+    const idx=state.budgets.findIndex(b=>b.id===draft.id);
+    if(idx>=0)state.budgets[idx]=draft;else state.budgets.push(draft);
+    mark();closeSheet();setTab("objectifs");render();toast(isEdit?"Budget enregistré ✓":"Budget créé ✓","green");
+  };
+  const del=document.getElementById("bDel");
+  if(del)del.onclick=()=>{if(!confirm("Supprimer ce budget ?"))return;state.budgets=state.budgets.filter(b=>b.id!==draft.id);mark();closeSheet();render();toast("Budget supprimé");};
 }
 
 /* ---------- Récurrentes ---------- */

@@ -60,6 +60,11 @@
 - **Récurrences sur les mois futurs** : le moteur ne générait que jusqu'au mois courant → juillet 2026+ avaient des totaux faux. Corrigé : **horizon glissant** (mois courant +18, ou mois/année consulté), matérialisation à l'ouverture de Mouvements/Analyse. 13 tests (mois futurs, fin, doublon, déc→jan, navigation lointaine).
 - **Date de fin** optionnelle sur les récurrentes (champ « Jusqu'au mois ») — pour les charges limitées (crédit, etc.).
 
+## 🆕 MAJ 14/06/2026 (nuit) — objectifs de budget (v2.0)
+
+- **Objectifs de budget** : enveloppes mensuelles par poste, **entièrement modifiables** (poste, montant, devise €/R$, détail, icône, couleur) + ajout/suppression, sur l'onglet **Objectifs** (au-dessus des objectifs d'épargne). Chaque ligne affichée en **€ ET R$**, total du budget dans les deux devises dans le titre de section.
+- **Jeu de départ pré-rempli** (montants en €, total 1 300 €) : Fixes 644 € (loyer 525, Adobe 59, Free 20, mutuelle 20, Google One 20), Sport 25 €, Courses 300 €, Restos + sorties 120 €, Transport perso (soirées) 60 €, Transport pro (shoot) 51 €, Shopping 50 €, Santé courante 50 €. Migration auto pour les états existants (`state.budgets`).
+
 ## ❓ Questions pour Lucas (à répondre demain)
 
 1. **Jours de prélèvement** loyer / Adobe / Free / mutuelle ? (mis au 5 par défaut)
