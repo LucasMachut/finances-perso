@@ -1,8 +1,9 @@
 # Suivi projet — Finances • Perso
 
-> App de suivi financier personnel pour Lucas. v1 livrée le **13 juin 2026** (session autonome).
-> Fichier principal : `finances.html` (un seul fichier, hors-ligne, localStorage).
-> Même identité visuelle + même logique que *Pulso pour Richard*.
+> App de suivi financier personnel pour Lucas. v1 livrée le **13 juin 2026** (session autonome). **Version actuelle : v1.9.**
+> Fichier principal : `finances.html` (un seul fichier, hors-ligne, identité *Pulso pour Richard*).
+> **En ligne : https://lucasmachut.github.io/finances-perso/** (GitHub Pages, repo public — code seul, aucune donnée).
+> **Stockage : Supabase** (cloud, connexion email+mot de passe, sync live) + cache localStorage.
 
 ---
 
@@ -39,6 +40,26 @@
 - **Multiplication d'une dépense.** Champ « Montant unitaire » × « Quantité » avec **total calculé en direct dans les deux devises** (ex : ticket de métro × nombre de trajets). Le détail `prix×qté` est rappelé sous le mouvement.
 - **Plusieurs montants d'un coup (différents).** Champ « Plusieurs montants » : on liste des montants séparés par un espace (ou `;` / `+`), ils s'**additionnent** au total (la virgule reste le séparateur décimal FR). Ex : tous les trajets/courses du mois en une saisie. Stocké dans `montants[]` (montant = somme, stats justes), nombre de montants rappelé sous le mouvement. Cumulable avec unitaire×qté.
 
+## 🆕 MAJ 14/06/2026 — cloud Supabase + UX + fix récurrences
+
+**Stockage — bascule GitHub → Supabase**
+- Ancienne synchro GitHub (`finances-data`) **abandonnée** (friction jeton par navigateur, jamais réussi à pousser).
+- Désormais **Supabase** (projet `zadsiirtjvznmcepawje`, org « finances », gratuit, région us-east-1) : table `public.finances` (1 ligne/user, `data` jsonb) + RLS (chacun sa ligne) + Realtime. URL + clé anon (publique) en dur dans le code.
+- **Connexion email + mot de passe** — aucun email envoyé (« Confirm email » désactivé côté Supabase). 1 fois par navigateur via ☁ → sauvegarde auto + **sync live** entre appareils. localStorage = cache offline.
+- Validé de bout en bout (signup→session, insert/select, **isolation RLS**). `supabase-setup.sql` dans le repo. NB : 2 comptes test `@finances-test.app` à supprimer dans Supabase → Auth → Users.
+- ⚠️ Connecter **d'abord** le navigateur qui a les vraies données (il pousse au cloud), puis les autres (ils tirent).
+
+**UX / saisie**
+- **Formulaire mouvement réorganisé** : Titre → Type → Montant (+devise) → Date → Catégorie ; options avancées (× quantité / plusieurs montants) repliées derrière « Détailler » ; fréquence à la fin.
+- **Édition d'une dépense** clarifiée (champ « Montant » direct) — toucher une ligne dans Mouvements **ou** dans le détail d'une catégorie ouvre le formulaire.
+- **Catégories cliquables** (Accueil + Analyse, barres + légende du donut) → feuille de détail des mouvements du mois (chaque ligne éditable) + total. Chevron « › » d'affordance.
+- **Devise par défaut = R$** dans les formulaires (basculable € au cas par cas).
+- **Jauge accueil corrigée** : « Taux de marge » → **« Budget du mois »** = part des revenus dépensée (vide/vert = ok, pleine/amber/rouge = tout dépensé / déficit).
+
+**Fix**
+- **Récurrences sur les mois futurs** : le moteur ne générait que jusqu'au mois courant → juillet 2026+ avaient des totaux faux. Corrigé : **horizon glissant** (mois courant +18, ou mois/année consulté), matérialisation à l'ouverture de Mouvements/Analyse. 13 tests (mois futurs, fin, doublon, déc→jan, navigation lointaine).
+- **Date de fin** optionnelle sur les récurrentes (champ « Jusqu'au mois ») — pour les charges limitées (crédit, etc.).
+
 ## ❓ Questions pour Lucas (à répondre demain)
 
 1. **Jours de prélèvement** loyer / Adobe / Free / mutuelle ? (mis au 5 par défaut)
@@ -48,7 +69,7 @@
 5. **Objectifs** : quels objectifs d'épargne réels (nom, montant cible, déjà épargné, échéance) ?
 6. **Lien avec l'app Facturation LSF** : faut-il **importer automatiquement** tes revenus depuis l'app de facturation, ou tu saisis les revenus à la main ici ?
 7. **Solde de compte** : veux-tu suivre un **solde de compte bancaire réel** (point de départ + variations) en plus de la marge mensuelle ?
-   - *Stockage : réglé.* On est partis sur la **sync cloud via ton GitHub privé** (repo `finances-data`). Reste à valider que ça te convient à l'usage (sync multi-appareils, expiration du jeton à renouveler ~1 an).
+   - *Stockage : réglé (Supabase, voir MAJ 14/06).*
 8. **Vue annuelle / patrimoine** : besoin d'un onglet bilan annuel (total épargné sur l'année, évolution du patrimoine) ?
 9. **Récurrentes variables** : certaines charges varient (élec, eau). Garder un montant estimé modifiable chaque mois, ou autre logique ?
 10. **Catégories** : les 13 catégories par défaut te conviennent ? À ajouter/renommer/supprimer ?
@@ -67,6 +88,9 @@
 
 ---
 
-## 🗂️ Repo GitHub
+## 🗂️ Liens
 
-Voir le lien renvoyé en fin de session (repo privé créé automatiquement).
+- **App en ligne** : https://lucasmachut.github.io/finances-perso/
+- **Repo code** (public, code seul) : https://github.com/LucasMachut/finances-perso
+- **Données** : Supabase, projet `zadsiirtjvznmcepawje` (org « finances », gratuit) — table `public.finances`, RLS, Realtime. SQL d'install : `supabase-setup.sql`.
+- Réglage Supabase à connaître : « Confirm email » **désactivé** (Auth → Sign In/Providers → User Signups) pour la connexion mot de passe sans email.
