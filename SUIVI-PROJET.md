@@ -65,6 +65,12 @@
 - **Objectifs de budget** : enveloppes mensuelles par poste, **entièrement modifiables** (poste, montant, devise €/R$, détail, icône, couleur) + ajout/suppression, sur l'onglet **Objectifs** (au-dessus des objectifs d'épargne). Chaque ligne affichée en **€ ET R$**, total du budget dans les deux devises dans le titre de section.
 - **Jeu de départ pré-rempli** (montants en €, total 1 300 €) : Fixes 644 € (loyer 525, Adobe 59, Free 20, mutuelle 20, Google One 20), Sport 25 €, Courses 300 €, Restos + sorties 120 €, Transport perso (soirées) 60 €, Transport pro (shoot) 51 €, Shopping 50 €, Santé courante 50 €. Migration auto pour les états existants (`state.budgets`).
 
+## 🆕 MAJ 14/06/2026 (nuit) — jauges de cadence sur les budgets (v2.1)
+
+- **Jauge dépensé / budget par poste** : chaque objectif de budget affiche une barre de progression (dépensé ce mois vs budget) en **€ et R$**, % consommé, et le reste. Couleur : 🟢 bon rythme · 🟠 « ralentis, en avance sur le rythme » · 🔴 budget dépassé.
+- **Repère « rythme du mois »** : un curseur sur la jauge marque le % du mois écoulé (ex. jour 14 ≈ 47 %). Si la barre dépasse le repère → on dépense trop vite. Bandeau récap en tête : total dépensé / budget + % du mois écoulé.
+- **Catégories suivies modifiables** : chaque budget est relié à des catégories de dépense (multi-sélection dans le formulaire) qui alimentent sa jauge. Mappings par défaut (Fixes→Logement+Abos, Courses→Courses, Restos+sorties→Restaurants, Transport perso→Transport, Shopping→Shopping, Santé→Santé, Sport→Loisirs ; Transport pro à associer). Backfill auto par `id` pour les budgets déjà créés en v2.0. Les récurrentes du mois sont matérialisées avant le calcul.
+
 ## ❓ Questions pour Lucas (à répondre demain)
 
 1. **Jours de prélèvement** loyer / Adobe / Free / mutuelle ? (mis au 5 par défaut)

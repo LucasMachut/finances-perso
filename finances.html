@@ -228,15 +228,10 @@
   .goal-foot{display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink-faint);font-weight:700;margin-top:8px;font-variant-numeric:tabular-nums}
 
   /* ---------- Objectifs de budget ---------- */
-  .bud-row{display:flex;align-items:center;gap:12px;padding:11px 2px;border-bottom:1px solid var(--line);cursor:pointer}
-  .bud-row:last-child{border-bottom:none}
-  .bud-row:active{opacity:.6}
-  .bud-ico{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;color:#fff}
-  .bud-body{flex:1;min-width:0}
-  .bud-nm{font-weight:800;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .bud-det{font-size:11.5px;color:var(--ink-faint);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .bud-amt{text-align:right;font-weight:900;font-size:15px;font-variant-numeric:tabular-nums;flex-shrink:0}
-  .bud-brl{font-size:11.5px;color:var(--ink-faint);font-weight:700;margin-top:1px}
+  .bgauge{position:relative;height:10px;border-radius:99px;background:var(--surface-2);margin-top:13px}
+  .bgauge > i{display:block;height:100%;border-radius:99px;transition:width .4s}
+  .bgauge > .mark{position:absolute;top:-3px;height:16px;width:2px;background:var(--ink);opacity:.45;border-radius:2px}
+  .bgauge > .mark::after{content:"";position:absolute;top:-3px;left:-2px;width:6px;height:6px;border-radius:50%;background:var(--ink);opacity:.9}
 
   /* ---------- Récurrentes ---------- */
   .rec-row{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:9px;box-shadow:var(--shadow)}
@@ -389,7 +384,7 @@
    Même logique que "Pulso pour Richard" : 1 fichier, localStorage, backup JSON
    ===================================================================== */
 const KEY="finances_perso_v1";
-const APP_VERSION="2.0";
+const APP_VERSION="2.1";
 const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
 const MOIS=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
 const JOURS=["dim","lun","mar","mer","jeu","ven","sam"];
@@ -415,16 +410,17 @@ const CAT_ICONES=["🏠","🛒","🚗","🍽️","🎮","💊","📱","🏛️",
 const GOAL_ICONES=["🎯","✈️","🏖️","🚗","🏠","💍","🎓","💻","📷","🛟","🎄","💰","🏔️","🛵","🎸","👶"];
 const BUDGET_ICONES=["📌","🏃","🛒","🍽️","🚗","📷","🛍️","💊","🏠","📱","🎮","✈️","💡","🎁","💳","💰"];
 
-/* objectifs de budget par défaut (enveloppes mensuelles, modifiables) — montants en € */
+/* objectifs de budget par défaut (enveloppes mensuelles, modifiables) — montants en €
+   cats = catégories de dépense suivies pour la jauge dépensé/budget (modifiables) */
 const DEF_BUDGETS=[
-  {id:"b_fixes",   nom:"Fixes",                   montant:644,cur:"EUR",icone:"📌",cor:"#3b82f6",detail:"Loyer 525, Adobe 59, Free 20, mutuelle 20, Google One 20"},
-  {id:"b_sport",   nom:"Sport",                   montant:25, cur:"EUR",icone:"🏃",cor:"#2FE6A6",detail:""},
-  {id:"b_courses", nom:"Courses",                 montant:300,cur:"EUR",icone:"🛒",cor:"#84cc16",detail:""},
-  {id:"b_restos",  nom:"Restos + sorties",        montant:120,cur:"EUR",icone:"🍽️",cor:"#ec4899",detail:""},
-  {id:"b_tperso",  nom:"Transport perso (soirées)",montant:60, cur:"EUR",icone:"🚗",cor:"#f59e0b",detail:""},
-  {id:"b_tpro",    nom:"Transport pro (shoot)",   montant:51, cur:"EUR",icone:"📷",cor:"#06b6d4",detail:""},
-  {id:"b_shopping",nom:"Shopping",                montant:50, cur:"EUR",icone:"🛍️",cor:"#a855f7",detail:""},
-  {id:"b_sante",   nom:"Santé courante",          montant:50, cur:"EUR",icone:"💊",cor:"#ef4444",detail:""},
+  {id:"b_fixes",   nom:"Fixes",                   montant:644,cur:"EUR",icone:"📌",cor:"#3b82f6",detail:"Loyer 525, Adobe 59, Free 20, mutuelle 20, Google One 20",cats:["logement","abos"]},
+  {id:"b_sport",   nom:"Sport",                   montant:25, cur:"EUR",icone:"🏃",cor:"#2FE6A6",detail:"",cats:["loisirs"]},
+  {id:"b_courses", nom:"Courses",                 montant:300,cur:"EUR",icone:"🛒",cor:"#84cc16",detail:"",cats:["courses"]},
+  {id:"b_restos",  nom:"Restos + sorties",        montant:120,cur:"EUR",icone:"🍽️",cor:"#ec4899",detail:"",cats:["restau"]},
+  {id:"b_tperso",  nom:"Transport perso (soirées)",montant:60, cur:"EUR",icone:"🚗",cor:"#f59e0b",detail:"",cats:["transport"]},
+  {id:"b_tpro",    nom:"Transport pro (shoot)",   montant:51, cur:"EUR",icone:"📷",cor:"#06b6d4",detail:"",cats:[]},
+  {id:"b_shopping",nom:"Shopping",                montant:50, cur:"EUR",icone:"🛍️",cor:"#a855f7",detail:"",cats:["shopping"]},
+  {id:"b_sante",   nom:"Santé courante",          montant:50, cur:"EUR",icone:"💊",cor:"#ef4444",detail:"",cats:["sante"]},
 ];
 
 let _starterReplaced=false;
@@ -440,7 +436,10 @@ function migrate(s){
   if(!s.categories||!s.categories.length)s.categories=JSON.parse(JSON.stringify(DEF_CATS));
   if(!s.objectifs)s.objectifs=[];
   if(!s.budgets)s.budgets=JSON.parse(JSON.stringify(DEF_BUDGETS));
-  s.budgets.forEach(b=>{if(!b.cur)b.cur="EUR";});
+  s.budgets.forEach(b=>{
+    if(!b.cur)b.cur="EUR";
+    if(!Array.isArray(b.cats)){const def=DEF_BUDGETS.find(d=>d.id===b.id);b.cats=def?def.cats.slice():[];}
+  });
   if(!s.config)s.config={nom:"Lucas"};
   if(!("lastBackup" in s))s.lastBackup=null;
   if(!("demo" in s))s.demo=false;
@@ -834,12 +833,22 @@ function renderObjectifs(){
       <div class="sum"><div class="lbl">Objectif total</div><div class="val">${money(totCible)}</div><div style="font-size:12.5px;color:var(--ink-faint);font-weight:700;margin-top:3px">${fmtCur(eurToBrl(totCible),'BRL')}</div></div>
       <div class="sum full"><div class="lbl">Capacité d'épargne / mois (moy. 3 mois)</div><div class="val" style="color:${capacite>=0?'var(--green)':'var(--red)'};font-size:18px">${signedDualEUR(capacite)}</div></div>
     </div>`;
-  // ---- Objectifs de budget (enveloppes mensuelles modifiables) ----
+  // ---- Objectifs de budget (enveloppes mensuelles modifiables, jauge dépensé/budget) ----
+  const bym=ymNow();topUpRecurrences(bym);
   const buds=state.budgets||[];
   const totBud=buds.reduce((a,b)=>a+toEUR(b.montant,b.cur),0);
-  html+=`<div class="section-title">Objectifs de budget <span class="count">${buds.length}</span><span class="right">${dualEUR(totBud)}</span></div>`;
+  const totSpent=buds.reduce((a,b)=>a+budgetSpent(b,bym),0);
+  const totPct=totBud>0?Math.round(totSpent/totBud*100):0;
+  const elapsed=monthElapsedFrac(bym);
+  const totCol=totPct>=100?"var(--red)":(totPct>elapsed*100+8?"var(--amber)":"var(--green)");
+  html+=`<div class="section-title">Objectifs de budget <span class="count">${buds.length}</span></div>`;
   if(buds.length){
-    html+=`<div class="card" style="padding:8px 14px">`+buds.map(b=>budgetRow(b)).join("")+`</div>`;
+    html+=`<div class="card" style="padding:14px 16px 6px;margin-bottom:11px">
+      <div class="info-line" style="border:none;padding:0 0 2px"><span class="k" style="font-weight:800;color:var(--ink)">${moisLabel(bym)}</span><span class="v" style="color:${totCol}">${money0(totSpent)} / ${money0(totBud)}</span></div>
+      <div class="bgauge"><i style="width:${Math.min(100,totPct)}%;background:${totCol}"></i><div class="mark" style="left:${Math.round(Math.min(100,elapsed*100))}%" title="rythme du mois (jour ${new Date().getDate()})"></div></div>
+      <div class="goal-foot"><span style="color:${totCol}">${totPct}% du budget · ${Math.round(elapsed*100)}% du mois écoulé</span><span>${dualEUR(totBud-totSpent>=0?totBud-totSpent:0)} restant</span></div>
+    </div>`;
+    html+=buds.map(b=>budgetCard(b,bym)).join("");
   }else{
     html+=`<div class="empty" style="padding:24px"><div class="ico">📌</div><h3>Aucun budget</h3><p>Fixez un budget mensuel par poste (fixes, courses, sorties…).</p></div>`;
   }
@@ -859,13 +868,36 @@ function renderObjectifs(){
   document.getElementById("addObj").onclick=()=>formObjectif(null);
   document.getElementById("addBud").onclick=()=>formBudget(null);
 }
-/* ligne d'un objectif de budget : poste + montant € · R$ (touchez pour modifier) */
-function budgetRow(b){
-  const eur=toEUR(b.montant,b.cur);
-  return `<div class="bud-row" data-bud="${b.id}">
-    <div class="bud-ico" style="background:${b.cor||'#3b82f6'}">${b.icone||"📌"}</div>
-    <div class="bud-body"><div class="bud-nm">${esc(b.nom)}</div>${b.detail?`<div class="bud-det">${esc(b.detail)}</div>`:""}</div>
-    <div class="bud-amt">${money0(eur)}<div class="bud-brl">${fmtCur(eurToBrl(eur),'BRL')}</div></div>
+/* dépensé ce mois sur les catégories suivies d'un budget (en €) */
+function budgetSpent(b,ym){
+  const cats=b.cats||[];if(!cats.length)return 0;
+  return txMois(ym).filter(t=>t.type==="depense"&&cats.includes(t.categorie)).reduce((s,t)=>s+toEUR(t.montant,t.cur),0);
+}
+/* fraction du mois écoulée (0..1) : mois passé = 1, futur = 0, mois courant = jour/nb de jours */
+function monthElapsedFrac(ym){
+  const now=ymNow();if(ym<now)return 1;if(ym>now)return 0;
+  const d=new Date(),dim=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+  return d.getDate()/dim;
+}
+/* carte d'un objectif de budget : jauge dépensé / budget + repère « rythme du mois » (€ · R$) */
+function budgetCard(b,ym){
+  const budEur=toEUR(b.montant,b.cur),spent=budgetSpent(b,ym);
+  const pct=budEur>0?Math.round(spent/budEur*100):0;
+  const reste=budEur-spent,linked=(b.cats||[]).length>0;
+  const elapsed=monthElapsedFrac(ym);
+  let col,hint;
+  if(!linked){col="var(--ink-faint)";hint="Touchez pour associer des catégories";}
+  else if(pct>=100){col="var(--red)";hint="⚠️ Budget dépassé";}
+  else if(pct>elapsed*100+8){col="var(--amber)";hint="⚠️ Ralentis — en avance sur le rythme";}
+  else{col="var(--green)";hint="✓ Bon rythme";}
+  return `<div class="goal" data-bud="${b.id}">
+    <div class="goal-top">
+      <div class="goal-ico" style="background:${b.cor||'#3b82f6'}">${b.icone||"📌"}</div>
+      <div style="flex:1;min-width:0"><div class="gnm">${esc(b.nom)}</div><div class="gmeta">${dualEUR(spent)} / ${dualEUR(budEur)}</div></div>
+      <div class="gpct" style="color:${col}">${pct}%</div>
+    </div>
+    <div class="bgauge"><i style="width:${Math.min(100,pct)}%;background:${col}"></i>${linked?`<div class="mark" style="left:${Math.round(Math.min(100,elapsed*100))}%" title="rythme du mois"></div>`:""}</div>
+    <div class="goal-foot"><span style="color:${col}">${hint}</span><span>${reste>=0?"reste "+dualEUR(reste):"dépassé de "+dualEUR(-reste)}</span></div>
   </div>`;
 }
 
@@ -1050,7 +1082,8 @@ function formObjectif(existing){
 /* ---------- Objectif de budget (enveloppe mensuelle modifiable) ---------- */
 function formBudget(existing){
   const isEdit=!!existing;
-  draft=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),nom:"",montant:"",cur:"EUR",icone:"📌",cor:PALETTE[1],detail:""};
+  draft=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),nom:"",montant:"",cur:"EUR",icone:"📌",cor:PALETTE[1],detail:"",cats:[]};
+  if(!Array.isArray(draft.cats))draft.cats=[];
   const body=`
     <div class="fld"><label>Poste de budget</label><input id="bNom" value="${esc(draft.nom)}" placeholder="Ex : Courses, Sorties…"></div>
     <div class="frow">
@@ -1058,12 +1091,19 @@ function formBudget(existing){
       <div class="fld" style="flex:1"><label>Devise</label><select id="bCur"><option value="EUR" ${draft.cur!=="BRL"?"selected":""}>€ Euro</option><option value="BRL" ${draft.cur==="BRL"?"selected":""}>R$ Réal</option></select></div>
     </div>
     <div class="fld"><label>Détail <span class="opt">(optionnel)</span></label><input id="bDetail" value="${esc(draft.detail||"")}" placeholder="Ex : loyer 525, Adobe 59…"></div>
+    <div class="fld"><label>Catégories suivies <span class="opt">(pour la jauge dépensé / budget)</span></label>
+      <div class="cat-pick" id="bCats">${state.categories.filter(c=>c.type==="depense").map(c=>`<button type="button" data-c="${c.id}" class="${draft.cats.includes(c.id)?"on":""}">${c.icone} ${esc(c.nom)}</button>`).join("")}</div></div>
     <div class="fld"><label>Icône</label><div class="ico-pick" id="bIco">${BUDGET_ICONES.map(ic=>`<button data-i="${ic}" class="${draft.icone===ic?"on":""}">${ic}</button>`).join("")}</div></div>
     <div class="fld"><label>Couleur</label><div class="color-pick" id="bCor">${PALETTE.map(c=>`<div class="sw ${draft.cor===c?"on":""}" data-c="${c}" style="background:${c}"></div>`).join("")}</div></div>`;
   let foot=`<button class="btn btn-primary" id="bSave">${isEdit?"Enregistrer":"Créer le budget"}</button>`;
   if(isEdit)foot+=`<div class="btn-row" style="margin-top:8px"><button class="btn btn-danger" id="bDel">Supprimer</button></div>`;
   openSheet(isEdit?"Modifier le budget":"Nouvel objectif de budget",body,foot);
   const sb=document.getElementById("sheetBody");
+  sb.querySelectorAll("#bCats [data-c]").forEach(btn=>btn.onclick=()=>{
+    const id=btn.dataset.c,i=draft.cats.indexOf(id);
+    if(i>=0)draft.cats.splice(i,1);else draft.cats.push(id);
+    btn.classList.toggle("on",draft.cats.includes(id));
+  });
   sb.querySelectorAll("#bIco [data-i]").forEach(b=>b.onclick=()=>{draft.icone=b.dataset.i;sb.querySelectorAll("#bIco [data-i]").forEach(x=>x.classList.toggle("on",x.dataset.i===draft.icone));});
   sb.querySelectorAll("#bCor [data-c]").forEach(b=>b.onclick=()=>{draft.cor=b.dataset.c;sb.querySelectorAll("#bCor .sw").forEach(x=>x.classList.toggle("on",x.dataset.c===draft.cor));});
   document.getElementById("bSave").onclick=()=>{
