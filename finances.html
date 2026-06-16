@@ -384,7 +384,7 @@
    Même logique que "Pulso pour Richard" : 1 fichier, localStorage, backup JSON
    ===================================================================== */
 const KEY="finances_perso_v1";
-const APP_VERSION="2.2";
+const APP_VERSION="2.3";
 const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
 const MOIS=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
 const JOURS=["dim","lun","mar","mer","jeu","ven","sam"];
@@ -552,7 +552,7 @@ function topUpRecurrences(uptoYm){
     if(r.fin&&r.fin<end)end=r.fin;          // date de fin éventuelle
     let ym=r.desde||cur,guard=0;
     while(ym<=end&&guard<600){
-      if(!state.tx.some(t=>t.recId===r.id&&(t.date||"").startsWith(ym))){
+      if(!(r.skip||[]).includes(ym)&&!state.tx.some(t=>t.recId===r.id&&(t.date||"").startsWith(ym))){
         const day=Math.min(Number(r.jour)||1,daysInMonth(ym));
         state.tx.push({id:uid(),type:r.type,date:ym+"-"+String(day).padStart(2,"0"),montant:Number(r.montant)||0,cur:r.cur||"EUR",categorie:r.categorie,note:r.note||"",recId:r.id});
         added=true;
@@ -1023,7 +1023,10 @@ function formTx(existing,presetType){
         <button data-r="1" class="${draft._rec?"on":""}">Tous les mois<small>récurrent</small></button>
       </div></div>`}`;
   let foot=`<button class="btn btn-primary" id="tSave">${isEdit?"Enregistrer":"Ajouter"}</button>`;
-  if(isEdit)foot+=`<button class="btn btn-danger" id="tDel" style="margin-top:8px">Supprimer</button>`;
+  if(isEdit){
+    if(draft.recId)foot+=`<div class="btn-row" style="margin-top:8px"><button class="btn btn-ghost" id="tDelOne">Supprimer cette fois-ci</button><button class="btn btn-danger" id="tDelRec">Supprimer la récurrente</button></div>`;
+    else foot+=`<button class="btn btn-danger" id="tDel" style="margin-top:8px">Supprimer</button>`;
+  }
   openSheet(isEdit?"Modifier le mouvement":"Nouveau mouvement",body,foot);
   const sb=document.getElementById("sheetBody");
   const wireCats=()=>wireCatPick(sb,"tCatWrap");
@@ -1071,6 +1074,22 @@ function formTx(existing,presetType){
   };
   const del=document.getElementById("tDel");
   if(del)del.onclick=()=>{if(!confirm("Supprimer ce mouvement ?"))return;state.tx=state.tx.filter(t=>t.id!==draft.id);mark();closeSheet();render();toast("Mouvement supprimé");};
+  // mouvement issu d'une récurrente : supprimer juste cette occurrence (sans régénération) ou toute la récurrente
+  const delOne=document.getElementById("tDelOne");
+  if(delOne)delOne.onclick=()=>{
+    if(!confirm("Supprimer cette dépense pour ce mois-ci ? Elle ne reviendra pas ce mois mais la récurrente continue les autres mois."))return;
+    const rec=state.recurrences.find(r=>r.id===draft.recId),ym=(draft.date||"").slice(0,7);
+    if(rec&&ym){rec.skip=rec.skip||[];if(!rec.skip.includes(ym))rec.skip.push(ym);}
+    state.tx=state.tx.filter(t=>t.id!==draft.id);
+    mark();closeSheet();render();toast("Supprimée pour ce mois ✓");
+  };
+  const delRec=document.getElementById("tDelRec");
+  if(delRec)delRec.onclick=()=>{
+    if(!confirm("Supprimer toute la récurrente ? Toutes ses occurrences (passées et futures) seront retirées et elle ne reviendra plus."))return;
+    state.recurrences=state.recurrences.filter(r=>r.id!==draft.recId);
+    state.tx=state.tx.filter(t=>t.recId!==draft.recId);
+    mark();closeSheet();render();toast("Récurrente supprimée ✓");
+  };
 }
 
 function formObjectif(existing){
@@ -1222,9 +1241,11 @@ function formRecurrence(existing){
   };
   const del=document.getElementById("rDel");
   if(del)del.onclick=()=>{
-    if(!confirm("Supprimer cette récurrente ? Les mouvements déjà générés seront conservés."))return;
+    if(!confirm("Supprimer cette récurrente ? Les mouvements passés sont conservés, les mois à venir sont retirés et elle ne reviendra plus."))return;
+    const cur=ymNow();
     state.recurrences=state.recurrences.filter(r=>r.id!==draft.id);
-    state.tx.forEach(t=>{if(t.recId===draft.id)delete t.recId;});
+    state.tx=state.tx.filter(t=>!(t.recId===draft.id&&(t.date||"").slice(0,7)>cur)); // retire les occurrences futures
+    state.tx.forEach(t=>{if(t.recId===draft.id)delete t.recId;});                    // détache le passé (conservé en historique)
     mark();closeSheet();render();toast("Récurrente supprimée");
   };
 }
