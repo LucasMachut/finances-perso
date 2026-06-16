@@ -79,6 +79,14 @@
 - **Réconciliation des onglets** : le récap budget affiche maintenant *Dépensé sur postes suivis* + *Hors budgets (impôts, autres…)* + *Total dépenses du mois* — ce dernier = le total de l'accueil. Plus d'écart inexpliqué.
 - ⚠️ Les dépenses **ponctuelles** déjà saisies dans Sport/Transport perso/pro restent à reclasser à la main dans les nouvelles catégories (la migration ne touche que les récurrentes identifiées par mot-clé).
 
+## 🆕 MAJ 14/06/2026 (nuit) — fix suppression des récurrentes (v2.3)
+
+- **Bug** : supprimer une dépense récurrente dans Mouvements ne marchait pas — `topUpRecurrences` la régénérait au render suivant (« elle revient tout le temps »).
+- **Fix** : sur un mouvement récurrent (↻), le formulaire propose deux actions :
+  - **« Supprimer cette fois-ci »** → ajoute le mois à `recurrence.skip[]` ; `topUpRecurrences` ne régénère plus ce mois précis (les autres mois continuent).
+  - **« Supprimer la récurrente »** → retire la récurrente **et** toutes ses occurrences (passées + futures).
+- **Suppression depuis le gestionnaire** (Gérer les récurrentes) corrigée : conserve les occurrences **passées** (détachées en historique), **retire les mois à venir** (avant : 18 mois futurs restaient).
+
 ## ❓ Questions pour Lucas (à répondre demain)
 
 1. **Jours de prélèvement** loyer / Adobe / Free / mutuelle ? (mis au 5 par défaut)
