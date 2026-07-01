@@ -551,10 +551,15 @@ function topUpRecurrences(uptoYm){
     let end=horizon;
     if(r.fin&&r.fin<end)end=r.fin;          // date de fin éventuelle
     let ym=r.desde||cur,guard=0;
+    const norm=s=>String(s||"").trim().toLowerCase();
     while(ym<=end&&guard<600){
-      if(!(r.skip||[]).includes(ym)&&!state.tx.some(t=>t.recId===r.id&&(t.date||"").startsWith(ym))){
+      // occurrence déjà générée ce mois ? (recYm = mois d'origine → robuste même si la date a été déplacée vers un autre mois)
+      const exists=state.tx.some(t=>t.recId===r.id&&(t.recYm?t.recYm===ym:(t.date||"").startsWith(ym)));
+      // mois passé : ne pas recréer par-dessus un mouvement similaire déjà présent (ex : récurrente supprimée puis recréée)
+      const similar=!exists&&ym<cur&&state.tx.some(t=>!t.recId&&t.type===r.type&&t.categorie===r.categorie&&(t.date||"").startsWith(ym)&&norm(t.note)===norm(r.note));
+      if(!(r.skip||[]).includes(ym)&&!exists&&!similar){
         const day=Math.min(Number(r.jour)||1,daysInMonth(ym));
-        state.tx.push({id:uid(),type:r.type,date:ym+"-"+String(day).padStart(2,"0"),montant:Number(r.montant)||0,cur:r.cur||"EUR",categorie:r.categorie,note:r.note||"",recId:r.id});
+        state.tx.push({id:uid(),type:r.type,date:ym+"-"+String(day).padStart(2,"0"),montant:Number(r.montant)||0,cur:r.cur||"EUR",categorie:r.categorie,note:r.note||"",recId:r.id,recYm:ym});
         added=true;
       }
       ym=shiftMonth(ym,1);guard++;
@@ -645,12 +650,23 @@ function renderAccueil(){
   let catHtml="";
   if(cats.length){
     catHtml=cats.slice(0,4).map(c=>{const ct=cat(c.id);const pct=Math.round(c.v/s.depenses*100);return `
-      <div class="cat-row">
+      <div class="cat-row" data-cat="${c.id}">
         <div class="cat-ico" style="background:${ct.cor}">${ct.icone}</div>
         <div class="cat-bar"><div class="cbtop"><span class="cbn">${esc(ct.nom)}</span><span class="cbv">${dualEUR(c.v)}</span></div>
           <div class="cbtrack"><i style="width:${Math.round(c.v/maxCat*100)}%;background:${ct.cor}"></i></div></div>
         <div class="cat-pct">${pct}%</div>
       </div>`;}).join("");
+    // le reste des catégories n'est plus passé sous silence : ligne agrégée cliquable vers l'Analyse
+    const rest=cats.slice(4);
+    if(rest.length){
+      const rv=rest.reduce((a,c)=>a+c.v,0);const rpct=Math.round(rv/s.depenses*100);
+      catHtml+=`<div class="cat-row" id="goAnalyseCats" style="cursor:pointer">
+        <div class="cat-ico" style="background:var(--surface-2)">…</div>
+        <div class="cat-bar"><div class="cbtop"><span class="cbn">+ ${rest.length} autre${rest.length>1?"s":""} catégorie${rest.length>1?"s":""}</span><span class="cbv">${dualEUR(rv)}</span></div>
+          <div class="cbtrack"><i style="width:${Math.round(rv/maxCat*100)}%;background:var(--ink-faint)"></i></div></div>
+        <div class="cat-pct">${rpct}%</div>
+      </div>`;
+    }
   }else catHtml=`<div class="hint" style="text-align:center;padding:10px 0">Aucune dépense ce mois-ci.</div>`;
 
   // objectifs preview
@@ -699,6 +715,7 @@ function renderAccueil(){
   el.querySelectorAll("[data-goal]").forEach(c=>c.onclick=()=>formObjectif(objs.find(o=>o.id===c.dataset.goal)));
   el.querySelectorAll("[data-cat]").forEach(c=>c.onclick=()=>openCategorieDetail(c.dataset.cat,ymNow()));
   const go=document.getElementById("goObj");if(go)go.onclick=()=>{setTab("objectifs");render();};
+  const ga=document.getElementById("goAnalyseCats");if(ga)ga.onclick=()=>{ui.finMonth=ymNow();setTab("analyse");render();};
   document.getElementById("goRec").onclick=openRecurrences;
 }
 
@@ -774,7 +791,9 @@ function renderAnalyse(){
   const segs=cats.map(c=>({value:c.v,color:cat(c.id).cor}));
   let donutHtml;
   if(cats.length){
-    const leg=cats.slice(0,6).map(c=>{const ct=cat(c.id);const pct=Math.round(c.v/s.depenses*100);return `<div class="dl" data-cat="${c.id}"><i style="background:${ct.cor}"></i><span class="dln">${esc(ct.nom)}</span><span class="dlv">${pct}%</span></div>`;}).join("");
+    let leg=cats.slice(0,6).map(c=>{const ct=cat(c.id);const pct=Math.round(c.v/s.depenses*100);return `<div class="dl" data-cat="${c.id}"><i style="background:${ct.cor}"></i><span class="dln">${esc(ct.nom)}</span><span class="dlv">${pct}%</span></div>`;}).join("");
+    const legRest=cats.slice(6);
+    if(legRest.length){const lv=legRest.reduce((a,c)=>a+c.v,0);leg+=`<div class="dl"><i style="background:var(--ink-faint)"></i><span class="dln">+ ${legRest.length} autres</span><span class="dlv">${Math.round(lv/s.depenses*100)}%</span></div>`;}
     donutHtml=`<div class="donut-wrap">
       <div class="donut-c">${donutSvg(segs)}<div class="donut-center"><div class="dc-v">${money0(s.depenses)}</div><div class="dc-l">dépenses</div><div style="font-size:11px;color:var(--ink-faint);font-weight:700;margin-top:2px">${fmtCur(eurToBrl(s.depenses),'BRL')}</div></div></div>
       <div class="donut-leg">${leg}</div></div>`;
@@ -982,10 +1001,13 @@ function wireCatPick(sb,wrapId){
   if(newBtn)newBtn.onclick=()=>{const open=wrap.style.display==="none";wrap.style.display=open?"flex":"none";if(open&&inp)inp.focus();};
   const createCat=()=>{
     const nom=(inp.value||"").trim();if(!nom){toast("Renseignez un nom de catégorie","amber");return;}
-    const nc={id:uid(),nom,cor:PALETTE[state.categories.length%PALETTE.length],icone:draft.type==="revenu"?"💰":"📦",type:draft.type};
-    state.categories.push(nc);draft.categorie=nc.id;mark();
+    // une catégorie du même nom existe déjà ? on la réutilise (évite deux « Sport » avec des ids différents)
+    const ex=state.categories.find(c=>c.type===draft.type&&c.nom.trim().toLowerCase()===nom.toLowerCase());
+    const nc=ex||{id:uid(),nom,cor:PALETTE[state.categories.length%PALETTE.length],icone:draft.type==="revenu"?"💰":"📦",type:draft.type};
+    if(!ex)state.categories.push(nc);
+    draft.categorie=nc.id;mark();
     document.getElementById(wrapId).innerHTML=catPickHtml(draft.type);wireCatPick(sb,wrapId);
-    toast("Catégorie « "+nom+" » créée ✓","green");
+    toast(ex?"Catégorie « "+nc.nom+" » sélectionnée ✓":"Catégorie « "+nom+" » créée ✓","green");
   };
   if(saveCat)saveCat.onclick=createCat;
   if(inp)inp.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();createCat();}};
@@ -994,7 +1016,7 @@ function formTx(existing,presetType){
   const isEdit=!!existing;
   draft=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),type:presetType||"depense",date:todayYmd(),montant:"",cur:"BRL",categorie:"",note:"",_rec:false};
   if(!draft.cur)draft.cur="BRL";
-  if(!draft.categorie){const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"";}
+  // pas de catégorie pré-cochée : le choix doit être explicite (sinon tout tombe en silence dans la 1re catégorie)
   const advOpen=isEdit&&((draft.qte&&Number(draft.qte)!==1)||(draft.montants&&draft.montants.length));
   const body=`
     <div class="fld"><label>Titre</label><input id="tNote" value="${esc(draft.note||"")}" placeholder="Ex : Courses, Loyer, Salaire…"></div>
@@ -1033,7 +1055,8 @@ function formTx(existing,presetType){
   wireCats();
   sb.querySelectorAll("#tType [data-t]").forEach(b=>b.onclick=()=>{
     draft.type=b.dataset.t;sb.querySelectorAll("#tType [data-t]").forEach(x=>x.classList.toggle("on",x.dataset.t===draft.type));
-    const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"";
+    // on retrouve la catégorie d'origine si on revient au type initial ; sinon le choix redevient explicite
+    draft.categorie=(existing&&existing.type===draft.type)?existing.categorie:"";
     document.getElementById("tCatWrap").innerHTML=catPickHtml(draft.type);wireCats();
   });
   sb.querySelectorAll("#tFreq [data-r]").forEach(b=>b.onclick=()=>{draft._rec=b.dataset.r==="1";sb.querySelectorAll("#tFreq [data-r]").forEach(x=>x.classList.toggle("on",x.dataset.r===b.dataset.r));});
@@ -1061,13 +1084,16 @@ function formTx(existing,presetType){
     draft.date=document.getElementById("tDate").value;
     draft.note=document.getElementById("tNote").value.trim();
     if(!draft.date||!draft.montant){toast("Renseignez le montant et la date","amber");return;}
-    if(!draft.categorie){const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"autres";}
+    if(!draft.categorie){toast("Choisissez une catégorie","amber");return;}
     if(!isEdit&&draft._rec){
       // saisie classée « récurrent » → on crée une charge/recette récurrente
       const rec={id:uid(),type:draft.type,montant:draft.montant,cur:draft.cur,categorie:draft.categorie,note:draft.note,jour:Math.min(28,parseYmd(draft.date).getDate()),actif:true,desde:draft.date.slice(0,7)};
       state.recurrences.push(rec);topUpRecurrences();mark();closeSheet();ui.finMonth=draft.date.slice(0,7);render();toast("Récurrente créée ✓","green");return;
     }
-    delete draft._rec;delete draft.recId; // un mouvement édité à la main se détache de sa récurrence
+    delete draft._rec;
+    // un mouvement issu d'une récurrente reste lié à elle (sinon topUpRecurrences le régénérerait en double) ;
+    // on le marque « édité » pour que la modification de la récurrente ne l'écrase pas
+    if(draft.recId){draft.edited=true;if(!draft.recYm)draft.recYm=((existing&&existing.date)||draft.date).slice(0,7);}
     const idx=state.tx.findIndex(t=>t.id===draft.id);
     if(idx>=0)state.tx[idx]=draft;else state.tx.push(draft);
     mark();closeSheet();ui.finMonth=draft.date.slice(0,7);render();toast(isEdit?"Mouvement enregistré ✓":"Mouvement ajouté ✓","green");
@@ -1193,7 +1219,7 @@ function formRecurrence(existing){
   const isEdit=!!existing;
   draft=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),type:"depense",montant:"",cur:"BRL",categorie:"",note:"",jour:1,actif:true,desde:ymNow()};
   if(!draft.cur)draft.cur="BRL";
-  if(!draft.categorie){const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"";}
+  // pas de catégorie pré-cochée : le choix doit être explicite
   const body=`
     <div class="fld"><label>Type</label>
       <div class="choice" id="rType">
@@ -1219,7 +1245,7 @@ function formRecurrence(existing){
   wireCats();
   sb.querySelectorAll("#rType [data-t]").forEach(b=>b.onclick=()=>{
     draft.type=b.dataset.t;sb.querySelectorAll("#rType [data-t]").forEach(x=>x.classList.toggle("on",x.dataset.t===draft.type));
-    const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"";
+    draft.categorie=(existing&&existing.type===draft.type)?existing.categorie:"";
     document.getElementById("rCatWrap").innerHTML=catPickHtml(draft.type);wireCats();
   });
   document.getElementById("rSave").onclick=()=>{
@@ -1230,12 +1256,14 @@ function formRecurrence(existing){
     draft.desde=document.getElementById("rDesde").value||ymNow();
     draft.fin=document.getElementById("rFin").value||"";
     if(!draft.montant){toast("Renseignez un montant","amber");return;}
-    if(!draft.categorie){const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"autres";}
+    if(!draft.categorie){toast("Choisissez une catégorie","amber");return;}
     const idx=state.recurrences.findIndex(r=>r.id===draft.id);
     if(idx>=0){
-      // si on modifie une récurrente, on resynchronise les transactions futures non éditées
+      // si on modifie une récurrente, on ne régénère que le mois courant et les mois à venir :
+      // l'historique passé (ce qui a réellement été payé) et les occurrences éditées à la main restent intacts
       state.recurrences[idx]=draft;
-      state.tx=state.tx.filter(t=>t.recId!==draft.id); // on régénère proprement
+      const cutoff=ymNow();
+      state.tx=state.tx.filter(t=>!(t.recId===draft.id&&!t.edited&&(t.recYm||(t.date||"").slice(0,7))>=cutoff));
     }else state.recurrences.push(draft);
     topUpRecurrences();mark();closeSheet();render();toast(isEdit?"Récurrente enregistrée ✓":"Récurrente créée ✓","green");
   };
@@ -1291,8 +1319,15 @@ function formCategorie(existing){
   const del=document.getElementById("cDel");
   if(del)del.onclick=()=>{
     const used=state.tx.filter(t=>t.categorie===draft.id).length+state.recurrences.filter(r=>r.categorie===draft.id).length;
-    const msg=used?`Cette catégorie est utilisée par ${used} mouvement(s)/récurrente(s). Ils resteront mais s'afficheront en « Autres ». Supprimer quand même ?`:"Supprimer cette catégorie ?";
+    const msg=used?`Cette catégorie est utilisée par ${used} mouvement(s)/récurrente(s). Ils seront reclassés en « Autres ». Supprimer quand même ?`:"Supprimer cette catégorie ?";
     if(!confirm(msg))return;
+    // reclasse réellement les mouvements/récurrentes vers la catégorie fourre-tout (sinon chaque id orphelin
+    // devient une ligne « Autres » distincte dans les graphiques)
+    const fallback=draft.type==="revenu"?"autres_rev":"autres";
+    if(state.categories.some(c=>c.id===fallback&&c.id!==draft.id)){
+      state.tx.forEach(t=>{if(t.categorie===draft.id)t.categorie=fallback;});
+      state.recurrences.forEach(r=>{if(r.categorie===draft.id)r.categorie=fallback;});
+    }
     state.categories=state.categories.filter(c=>c.id!==draft.id);mark();closeSheet();openCategories();render();toast("Catégorie supprimée");
   };
 }
