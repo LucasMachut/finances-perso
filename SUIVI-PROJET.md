@@ -60,6 +60,33 @@
 - **Récurrences sur les mois futurs** : le moteur ne générait que jusqu'au mois courant → juillet 2026+ avaient des totaux faux. Corrigé : **horizon glissant** (mois courant +18, ou mois/année consulté), matérialisation à l'ouverture de Mouvements/Analyse. 13 tests (mois futurs, fin, doublon, déc→jan, navigation lointaine).
 - **Date de fin** optionnelle sur les récurrentes (champ « Jusqu'au mois ») — pour les charges limitées (crédit, etc.).
 
+## 🆕 MAJ 14/06/2026 (nuit) — objectifs de budget (v2.0)
+
+- **Objectifs de budget** : enveloppes mensuelles par poste, **entièrement modifiables** (poste, montant, devise €/R$, détail, icône, couleur) + ajout/suppression, sur l'onglet **Objectifs** (au-dessus des objectifs d'épargne). Chaque ligne affichée en **€ ET R$**, total du budget dans les deux devises dans le titre de section.
+- **Jeu de départ pré-rempli** (montants en €, total 1 300 €) : Fixes 644 € (loyer 525, Adobe 59, Free 20, mutuelle 20, Google One 20), Sport 25 €, Courses 300 €, Restos + sorties 120 €, Transport perso (soirées) 60 €, Transport pro (shoot) 51 €, Shopping 50 €, Santé courante 50 €. Migration auto pour les états existants (`state.budgets`).
+
+## 🆕 MAJ 14/06/2026 (nuit) — jauges de cadence sur les budgets (v2.1)
+
+- **Jauge dépensé / budget par poste** : chaque objectif de budget affiche une barre de progression (dépensé ce mois vs budget) en **€ et R$**, % consommé, et le reste. Couleur : 🟢 bon rythme · 🟠 « ralentis, en avance sur le rythme » · 🔴 budget dépassé.
+- **Repère « rythme du mois »** : un curseur sur la jauge marque le % du mois écoulé (ex. jour 14 ≈ 47 %). Si la barre dépasse le repère → on dépense trop vite. Bandeau récap en tête : total dépensé / budget + % du mois écoulé.
+- **Catégories suivies modifiables** : chaque budget est relié à des catégories de dépense (multi-sélection dans le formulaire) qui alimentent sa jauge. Mappings par défaut (Fixes→Logement+Abos, Courses→Courses, Restos+sorties→Restaurants, Transport perso→Transport, Shopping→Shopping, Santé→Santé, Sport→Loisirs ; Transport pro à associer). Backfill auto par `id` pour les budgets déjà créés en v2.0. Les récurrentes du mois sont matérialisées avant le calcul.
+
+## 🆕 MAJ 14/06/2026 (nuit) — budgets 1:1 avec catégories dédiées (v2.2)
+
+- **Problème v2.1** : les jauges devinaient le mapping budget→catégorie (Sport→Loisirs ⇒ Sport en rouge à cause des sorties ; total budget ≠ total dépenses accueil).
+- **Catégories dédiées créées** : **Fixes 📌, Sport 🏃, Transport perso 🚗, Transport pro 📷** (ajout idempotent). Chaque budget est désormais relié **1:1** à sa catégorie (Restos + sorties → Restaurants + Loisirs).
+- **Charges fixes rattachées à « Fixes »** : migration unique (`_budgetCatsV2`) qui re-catégorise les récurrentes/tx dont la note contient loyer/Adobe/Free/mutuelle/Google One → catégorie `fixes` (⇒ jauge Fixes = 644 €). Idem salle de sport (sport/gym/fitness/basic fit/muscu) → `sport`. Seed mis à jour (5 charges fixes en `fixes`, dont Google One 20 €).
+- **Réconciliation des onglets** : le récap budget affiche maintenant *Dépensé sur postes suivis* + *Hors budgets (impôts, autres…)* + *Total dépenses du mois* — ce dernier = le total de l'accueil. Plus d'écart inexpliqué.
+- ⚠️ Les dépenses **ponctuelles** déjà saisies dans Sport/Transport perso/pro restent à reclasser à la main dans les nouvelles catégories (la migration ne touche que les récurrentes identifiées par mot-clé).
+
+## 🆕 MAJ 14/06/2026 (nuit) — fix suppression des récurrentes (v2.3)
+
+- **Bug** : supprimer une dépense récurrente dans Mouvements ne marchait pas — `topUpRecurrences` la régénérait au render suivant (« elle revient tout le temps »).
+- **Fix** : sur un mouvement récurrent (↻), le formulaire propose deux actions :
+  - **« Supprimer cette fois-ci »** → ajoute le mois à `recurrence.skip[]` ; `topUpRecurrences` ne régénère plus ce mois précis (les autres mois continuent).
+  - **« Supprimer la récurrente »** → retire la récurrente **et** toutes ses occurrences (passées + futures).
+- **Suppression depuis le gestionnaire** (Gérer les récurrentes) corrigée : conserve les occurrences **passées** (détachées en historique), **retire les mois à venir** (avant : 18 mois futurs restaient).
+
 ## ❓ Questions pour Lucas (à répondre demain)
 
 1. **Jours de prélèvement** loyer / Adobe / Free / mutuelle ? (mis au 5 par défaut)

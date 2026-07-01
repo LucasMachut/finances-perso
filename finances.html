@@ -227,6 +227,12 @@
   .progress > i{display:block;height:100%;border-radius:99px;transition:width .4s}
   .goal-foot{display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink-faint);font-weight:700;margin-top:8px;font-variant-numeric:tabular-nums}
 
+  /* ---------- Objectifs de budget ---------- */
+  .bgauge{position:relative;height:10px;border-radius:99px;background:var(--surface-2);margin-top:13px}
+  .bgauge > i{display:block;height:100%;border-radius:99px;transition:width .4s}
+  .bgauge > .mark{position:absolute;top:-3px;height:16px;width:2px;background:var(--ink);opacity:.45;border-radius:2px}
+  .bgauge > .mark::after{content:"";position:absolute;top:-3px;left:-2px;width:6px;height:6px;border-radius:50%;background:var(--ink);opacity:.9}
+
   /* ---------- Récurrentes ---------- */
   .rec-row{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:9px;box-shadow:var(--shadow)}
   .rec-row .rbody{flex:1;min-width:0}
@@ -378,21 +384,29 @@
    Même logique que "Pulso pour Richard" : 1 fichier, localStorage, backup JSON
    ===================================================================== */
 const KEY="finances_perso_v1";
-const APP_VERSION="1.9";
+const APP_VERSION="2.3";
 const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
 const MOIS=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
 const JOURS=["dim","lun","mar","mer","jeu","ven","sam"];
 const PALETTE=["#16D1FF","#3b82f6","#2FE6A6","#f59e0b","#ec4899","#8b5cf6","#ef4444","#06b6d4","#a855f7","#84cc16","#64748b","#FFB020"];
 
+/* catégories dédiées aux objectifs de budget (1 budget ↔ 1 catégorie) */
+const BUDGET_DEDICATED_CATS=[
+  {id:"fixes",          nom:"Fixes",           cor:"#3b82f6",icone:"📌",type:"depense"},
+  {id:"sport",          nom:"Sport",           cor:"#2FE6A6",icone:"🏃",type:"depense"},
+  {id:"transport_perso",nom:"Transport perso", cor:"#f59e0b",icone:"🚗",type:"depense"},
+  {id:"transport_pro",  nom:"Transport pro",   cor:"#06b6d4",icone:"📷",type:"depense"},
+];
 /* catégories par défaut (id stables) */
 const DEF_CATS=[
-  {id:"logement",nom:"Logement",cor:"#3b82f6",icone:"🏠",type:"depense"},
-  {id:"courses",nom:"Courses",cor:"#2FE6A6",icone:"🛒",type:"depense"},
-  {id:"transport",nom:"Transport",cor:"#f59e0b",icone:"🚗",type:"depense"},
+  {id:"logement",nom:"Logement",cor:"#1d4ed8",icone:"🏠",type:"depense"},
+  ...BUDGET_DEDICATED_CATS,
+  {id:"courses",nom:"Courses",cor:"#84cc16",icone:"🛒",type:"depense"},
+  {id:"transport",nom:"Transport",cor:"#fb923c",icone:"🚙",type:"depense"},
   {id:"restau",nom:"Restaurants",cor:"#ec4899",icone:"🍽️",type:"depense"},
   {id:"loisirs",nom:"Loisirs",cor:"#8b5cf6",icone:"🎮",type:"depense"},
   {id:"sante",nom:"Santé",cor:"#ef4444",icone:"💊",type:"depense"},
-  {id:"abos",nom:"Abonnements",cor:"#06b6d4",icone:"📱",type:"depense"},
+  {id:"abos",nom:"Abonnements",cor:"#0891b2",icone:"📱",type:"depense"},
   {id:"impots",nom:"Impôts & taxes",cor:"#64748b",icone:"🏛️",type:"depense"},
   {id:"shopping",nom:"Shopping",cor:"#a855f7",icone:"🛍️",type:"depense"},
   {id:"autres",nom:"Autres",cor:"#94a3b8",icone:"📦",type:"depense"},
@@ -402,6 +416,28 @@ const DEF_CATS=[
 ];
 const CAT_ICONES=["🏠","🛒","🚗","🍽️","🎮","💊","📱","🏛️","🛍️","📦","💼","💻","➕","🎓","🐶","✈️","🎁","💡","💳","🏦"];
 const GOAL_ICONES=["🎯","✈️","🏖️","🚗","🏠","💍","🎓","💻","📷","🛟","🎄","💰","🏔️","🛵","🎸","👶"];
+const BUDGET_ICONES=["📌","🏃","🛒","🍽️","🚗","📷","🛍️","💊","🏠","📱","🎮","✈️","💡","🎁","💳","💰"];
+
+/* objectifs de budget par défaut (enveloppes mensuelles, modifiables) — montants en €
+   cats = catégories de dépense suivies pour la jauge dépensé/budget (modifiables) */
+const DEF_BUDGETS=[
+  {id:"b_fixes",   nom:"Fixes",                   montant:644,cur:"EUR",icone:"📌",cor:"#3b82f6",detail:"Loyer 525, Adobe 59, Free 20, mutuelle 20, Google One 20",cats:["fixes"]},
+  {id:"b_sport",   nom:"Sport",                   montant:25, cur:"EUR",icone:"🏃",cor:"#2FE6A6",detail:"",cats:["sport"]},
+  {id:"b_courses", nom:"Courses",                 montant:300,cur:"EUR",icone:"🛒",cor:"#84cc16",detail:"",cats:["courses"]},
+  {id:"b_restos",  nom:"Restos + sorties",        montant:120,cur:"EUR",icone:"🍽️",cor:"#ec4899",detail:"",cats:["restau","loisirs"]},
+  {id:"b_tperso",  nom:"Transport perso (soirées)",montant:60, cur:"EUR",icone:"🚗",cor:"#f59e0b",detail:"",cats:["transport_perso"]},
+  {id:"b_tpro",    nom:"Transport pro (shoot)",   montant:51, cur:"EUR",icone:"📷",cor:"#06b6d4",detail:"",cats:["transport_pro"]},
+  {id:"b_shopping",nom:"Shopping",                montant:50, cur:"EUR",icone:"🛍️",cor:"#a855f7",detail:"",cats:["shopping"]},
+  {id:"b_sante",   nom:"Santé courante",          montant:50, cur:"EUR",icone:"💊",cor:"#ef4444",detail:"",cats:["sante"]},
+];
+/* mappings budget → catégorie appliqués une fois aux états existants (corrige les devinettes v2.1) */
+const BUDGET_CATS_V2={b_fixes:["fixes"],b_sport:["sport"],b_courses:["courses"],b_restos:["restau","loisirs"],b_tperso:["transport_perso"],b_tpro:["transport_pro"],b_shopping:["shopping"],b_sante:["sante"]};
+/* mots-clés des charges fixes (pour rattacher loyer/Adobe/Free/mutuelle/Google One à la catégorie Fixes) */
+const FIXED_KEYWORDS=["loyer","adobe","free","mutuelle","google"];
+const isFixedCharge=note=>{const n=(note||"").toLowerCase();return FIXED_KEYWORDS.some(k=>n.includes(k));};
+/* mots-clés salle de sport (rattachement à la catégorie Sport) */
+const SPORT_KEYWORDS=["sport","gym","fitness","basic fit","basicfit","muscu"];
+const isSportCharge=note=>{const n=(note||"").toLowerCase();return SPORT_KEYWORDS.some(k=>n.includes(k));};
 
 let _starterReplaced=false;
 let state=load();
@@ -414,7 +450,22 @@ function migrate(s){
   if(!s.tx)s.tx=[];
   if(!s.recurrences)s.recurrences=[];
   if(!s.categories||!s.categories.length)s.categories=JSON.parse(JSON.stringify(DEF_CATS));
+  // catégories dédiées aux budgets (Fixes, Sport, Transport perso/pro) — ajout idempotent
+  BUDGET_DEDICATED_CATS.forEach(nc=>{if(!s.categories.some(c=>c.id===nc.id))s.categories.push(Object.assign({},nc));});
   if(!s.objectifs)s.objectifs=[];
+  if(!s.budgets)s.budgets=JSON.parse(JSON.stringify(DEF_BUDGETS));
+  s.budgets.forEach(b=>{
+    if(!b.cur)b.cur="EUR";
+    if(!Array.isArray(b.cats)){const def=DEF_BUDGETS.find(d=>d.id===b.id);b.cats=def?def.cats.slice():[];}
+  });
+  // v2.2 : applique une fois les mappings 1:1 corrigés + rattache les charges fixes à la catégorie « Fixes »
+  if(!s._budgetCatsV2){
+    s.budgets.forEach(b=>{if(BUDGET_CATS_V2[b.id])b.cats=BUDGET_CATS_V2[b.id].slice();});
+    const recat=note=>isFixedCharge(note)?"fixes":(isSportCharge(note)?"sport":null);
+    (s.recurrences||[]).forEach(r=>{if(r.type==="depense"){const c=recat(r.note);if(c)r.categorie=c;}});
+    (s.tx||[]).forEach(t=>{if(t.type==="depense"&&t.recId){const c=recat(t.note);if(c)t.categorie=c;}});
+    s._budgetCatsV2=true;
+  }
   if(!s.config)s.config={nom:"Lucas"};
   if(!("lastBackup" in s))s.lastBackup=null;
   if(!("demo" in s))s.demo=false;
@@ -435,13 +486,14 @@ function seed(){
   const cats=JSON.parse(JSON.stringify(DEF_CATS));
   const m=ymNow();
   const rec=[
-    {id:uid(),type:"revenu", montant:1650,cur:"EUR",categorie:"salaire", note:"Salaire", jour:30,actif:true,desde:m},
-    {id:uid(),type:"depense",montant:3100,cur:"BRL",categorie:"logement",note:"Loyer",   jour:5, actif:true,desde:m},
-    {id:uid(),type:"depense",montant:350, cur:"BRL",categorie:"abos",    note:"Adobe",   jour:5, actif:true,desde:m},
-    {id:uid(),type:"depense",montant:20,  cur:"EUR",categorie:"abos",    note:"Free",    jour:5, actif:true,desde:m},
-    {id:uid(),type:"depense",montant:20,  cur:"EUR",categorie:"sante",   note:"Mutuelle",jour:5, actif:true,desde:m},
+    {id:uid(),type:"revenu", montant:1650,cur:"EUR",categorie:"salaire",note:"Salaire",   jour:30,actif:true,desde:m},
+    {id:uid(),type:"depense",montant:3100,cur:"BRL",categorie:"fixes",  note:"Loyer",     jour:5, actif:true,desde:m},
+    {id:uid(),type:"depense",montant:350, cur:"BRL",categorie:"fixes",  note:"Adobe",     jour:5, actif:true,desde:m},
+    {id:uid(),type:"depense",montant:20,  cur:"EUR",categorie:"fixes",  note:"Free",      jour:5, actif:true,desde:m},
+    {id:uid(),type:"depense",montant:20,  cur:"EUR",categorie:"fixes",  note:"Mutuelle",  jour:5, actif:true,desde:m},
+    {id:uid(),type:"depense",montant:20,  cur:"EUR",categorie:"fixes",  note:"Google One",jour:5, actif:true,desde:m},
   ];
-  return{tx:[],recurrences:rec,categories:cats,objectifs:[],config:{nom:"Lucas"},fx:{rate:null,ts:0},lastBackup:null,demo:false,changes:0,updatedAt:0};
+  return{tx:[],recurrences:rec,categories:cats,objectifs:[],budgets:JSON.parse(JSON.stringify(DEF_BUDGETS)),_budgetCatsV2:true,config:{nom:"Lucas"},fx:{rate:null,ts:0},lastBackup:null,demo:false,changes:0,updatedAt:0};
 }
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Erreur d'enregistrement","amber");}}
 function mark(){state.changes=(state.changes||0)+1;state.updatedAt=Date.now();save();schedulePush();}
@@ -499,15 +551,10 @@ function topUpRecurrences(uptoYm){
     let end=horizon;
     if(r.fin&&r.fin<end)end=r.fin;          // date de fin éventuelle
     let ym=r.desde||cur,guard=0;
-    const norm=s=>String(s||"").trim().toLowerCase();
     while(ym<=end&&guard<600){
-      // occurrence déjà générée ce mois ? (recYm = mois d'origine → robuste même si la date a été déplacée vers un autre mois)
-      const exists=state.tx.some(t=>t.recId===r.id&&(t.recYm?t.recYm===ym:(t.date||"").startsWith(ym)));
-      // mois passé : ne pas recréer par-dessus un mouvement similaire déjà présent (ex : récurrente supprimée puis recréée)
-      const similar=!exists&&ym<cur&&state.tx.some(t=>!t.recId&&t.type===r.type&&t.categorie===r.categorie&&(t.date||"").startsWith(ym)&&norm(t.note)===norm(r.note));
-      if(!exists&&!similar){
+      if(!(r.skip||[]).includes(ym)&&!state.tx.some(t=>t.recId===r.id&&(t.date||"").startsWith(ym))){
         const day=Math.min(Number(r.jour)||1,daysInMonth(ym));
-        state.tx.push({id:uid(),type:r.type,date:ym+"-"+String(day).padStart(2,"0"),montant:Number(r.montant)||0,cur:r.cur||"EUR",categorie:r.categorie,note:r.note||"",recId:r.id,recYm:ym});
+        state.tx.push({id:uid(),type:r.type,date:ym+"-"+String(day).padStart(2,"0"),montant:Number(r.montant)||0,cur:r.cur||"EUR",categorie:r.categorie,note:r.note||"",recId:r.id});
         added=true;
       }
       ym=shiftMonth(ym,1);guard++;
@@ -598,23 +645,12 @@ function renderAccueil(){
   let catHtml="";
   if(cats.length){
     catHtml=cats.slice(0,4).map(c=>{const ct=cat(c.id);const pct=Math.round(c.v/s.depenses*100);return `
-      <div class="cat-row" data-cat="${c.id}">
+      <div class="cat-row">
         <div class="cat-ico" style="background:${ct.cor}">${ct.icone}</div>
         <div class="cat-bar"><div class="cbtop"><span class="cbn">${esc(ct.nom)}</span><span class="cbv">${dualEUR(c.v)}</span></div>
           <div class="cbtrack"><i style="width:${Math.round(c.v/maxCat*100)}%;background:${ct.cor}"></i></div></div>
         <div class="cat-pct">${pct}%</div>
       </div>`;}).join("");
-    // le reste des catégories n'est plus passé sous silence : ligne agrégée cliquable vers l'Analyse
-    const rest=cats.slice(4);
-    if(rest.length){
-      const rv=rest.reduce((a,c)=>a+c.v,0);const rpct=Math.round(rv/s.depenses*100);
-      catHtml+=`<div class="cat-row" id="goAnalyseCats" style="cursor:pointer">
-        <div class="cat-ico" style="background:var(--surface-2)">…</div>
-        <div class="cat-bar"><div class="cbtop"><span class="cbn">+ ${rest.length} autre${rest.length>1?"s":""} catégorie${rest.length>1?"s":""}</span><span class="cbv">${dualEUR(rv)}</span></div>
-          <div class="cbtrack"><i style="width:${Math.round(rv/maxCat*100)}%;background:var(--ink-faint)"></i></div></div>
-        <div class="cat-pct">${rpct}%</div>
-      </div>`;
-    }
   }else catHtml=`<div class="hint" style="text-align:center;padding:10px 0">Aucune dépense ce mois-ci.</div>`;
 
   // objectifs preview
@@ -663,7 +699,6 @@ function renderAccueil(){
   el.querySelectorAll("[data-goal]").forEach(c=>c.onclick=()=>formObjectif(objs.find(o=>o.id===c.dataset.goal)));
   el.querySelectorAll("[data-cat]").forEach(c=>c.onclick=()=>openCategorieDetail(c.dataset.cat,ymNow()));
   const go=document.getElementById("goObj");if(go)go.onclick=()=>{setTab("objectifs");render();};
-  const ga=document.getElementById("goAnalyseCats");if(ga)ga.onclick=()=>{ui.finMonth=ymNow();setTab("analyse");render();};
   document.getElementById("goRec").onclick=openRecurrences;
 }
 
@@ -739,9 +774,7 @@ function renderAnalyse(){
   const segs=cats.map(c=>({value:c.v,color:cat(c.id).cor}));
   let donutHtml;
   if(cats.length){
-    let leg=cats.slice(0,6).map(c=>{const ct=cat(c.id);const pct=Math.round(c.v/s.depenses*100);return `<div class="dl" data-cat="${c.id}"><i style="background:${ct.cor}"></i><span class="dln">${esc(ct.nom)}</span><span class="dlv">${pct}%</span></div>`;}).join("");
-    const legRest=cats.slice(6);
-    if(legRest.length){const lv=legRest.reduce((a,c)=>a+c.v,0);leg+=`<div class="dl"><i style="background:var(--ink-faint)"></i><span class="dln">+ ${legRest.length} autres</span><span class="dlv">${Math.round(lv/s.depenses*100)}%</span></div>`;}
+    const leg=cats.slice(0,6).map(c=>{const ct=cat(c.id);const pct=Math.round(c.v/s.depenses*100);return `<div class="dl" data-cat="${c.id}"><i style="background:${ct.cor}"></i><span class="dln">${esc(ct.nom)}</span><span class="dlv">${pct}%</span></div>`;}).join("");
     donutHtml=`<div class="donut-wrap">
       <div class="donut-c">${donutSvg(segs)}<div class="donut-center"><div class="dc-v">${money0(s.depenses)}</div><div class="dc-l">dépenses</div><div style="font-size:11px;color:var(--ink-faint);font-weight:700;margin-top:2px">${fmtCur(eurToBrl(s.depenses),'BRL')}</div></div></div>
       <div class="donut-leg">${leg}</div></div>`;
@@ -827,6 +860,33 @@ function renderObjectifs(){
       <div class="sum"><div class="lbl">Objectif total</div><div class="val">${money(totCible)}</div><div style="font-size:12.5px;color:var(--ink-faint);font-weight:700;margin-top:3px">${fmtCur(eurToBrl(totCible),'BRL')}</div></div>
       <div class="sum full"><div class="lbl">Capacité d'épargne / mois (moy. 3 mois)</div><div class="val" style="color:${capacite>=0?'var(--green)':'var(--red)'};font-size:18px">${signedDualEUR(capacite)}</div></div>
     </div>`;
+  // ---- Objectifs de budget (enveloppes mensuelles modifiables, jauge dépensé/budget) ----
+  const bym=ymNow();topUpRecurrences(bym);
+  const buds=state.budgets||[];
+  const totBud=buds.reduce((a,b)=>a+toEUR(b.montant,b.cur),0);
+  const totSpent=buds.reduce((a,b)=>a+budgetSpent(b,bym),0);
+  const totPct=totBud>0?Math.round(totSpent/totBud*100):0;
+  const elapsed=monthElapsedFrac(bym);
+  const totCol=totPct>=100?"var(--red)":(totPct>elapsed*100+8?"var(--amber)":"var(--green)");
+  const allDep=statsMois(bym).depenses;            // total dépenses du mois (toutes catégories — cohérent avec l'accueil)
+  const hors=Math.max(0,allDep-totSpent);          // dépenses hors postes budgétés (impôts, autres…)
+  html+=`<div class="section-title">Objectifs de budget <span class="count">${buds.length}</span></div>`;
+  if(buds.length){
+    html+=`<div class="card" style="padding:14px 16px 8px;margin-bottom:11px">
+      <div class="info-line" style="border:none;padding:0 0 2px"><span class="k" style="font-weight:800;color:var(--ink)">${moisLabel(bym)}</span><span class="v" style="color:${totCol}">${money0(totSpent)} / ${money0(totBud)}</span></div>
+      <div class="bgauge"><i style="width:${Math.min(100,totPct)}%;background:${totCol}"></i><div class="mark" style="left:${Math.round(Math.min(100,elapsed*100))}%" title="rythme du mois (jour ${new Date().getDate()})"></div></div>
+      <div class="goal-foot"><span style="color:${totCol}">${totPct}% du budget · ${Math.round(elapsed*100)}% du mois écoulé</span><span>${dualEUR(totBud-totSpent>=0?totBud-totSpent:0)} restant</span></div>
+      <div class="info-line" style="margin-top:10px"><span class="k">Dépensé sur postes suivis</span><span class="v">${dualEUR(totSpent)}</span></div>
+      <div class="info-line"><span class="k">Hors budgets (impôts, autres…)</span><span class="v">${dualEUR(hors)}</span></div>
+      <div class="info-line"><span class="k" style="font-weight:800;color:var(--ink)">Total dépenses du mois</span><span class="v" style="font-weight:800">${dualEUR(allDep)}</span></div>
+    </div>`;
+    html+=buds.map(b=>budgetCard(b,bym)).join("");
+  }else{
+    html+=`<div class="empty" style="padding:24px"><div class="ico">📌</div><h3>Aucun budget</h3><p>Fixez un budget mensuel par poste (fixes, courses, sorties…).</p></div>`;
+  }
+  html+=`<button class="btn btn-ghost" id="addBud" style="margin:2px 0 16px">＋ Nouveau budget</button>`;
+
+  // ---- Objectifs d'épargne ----
   if(objs.length){
     html+=`<div class="section-title">Mes objectifs <span class="count">${objs.length}</span></div>`;
     html+=objs.map(o=>goalCard(o,false)).join("");
@@ -836,7 +896,41 @@ function renderObjectifs(){
   html+=`<button class="btn btn-primary" id="addObj" style="margin-top:6px">＋ Nouvel objectif</button>`;
   el.innerHTML=html;
   el.querySelectorAll("[data-goal]").forEach(c=>c.onclick=()=>formObjectif(objs.find(o=>o.id===c.dataset.goal)));
+  el.querySelectorAll("[data-bud]").forEach(c=>c.onclick=()=>formBudget(buds.find(b=>b.id===c.dataset.bud)));
   document.getElementById("addObj").onclick=()=>formObjectif(null);
+  document.getElementById("addBud").onclick=()=>formBudget(null);
+}
+/* dépensé ce mois sur les catégories suivies d'un budget (en €) */
+function budgetSpent(b,ym){
+  const cats=b.cats||[];if(!cats.length)return 0;
+  return txMois(ym).filter(t=>t.type==="depense"&&cats.includes(t.categorie)).reduce((s,t)=>s+toEUR(t.montant,t.cur),0);
+}
+/* fraction du mois écoulée (0..1) : mois passé = 1, futur = 0, mois courant = jour/nb de jours */
+function monthElapsedFrac(ym){
+  const now=ymNow();if(ym<now)return 1;if(ym>now)return 0;
+  const d=new Date(),dim=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+  return d.getDate()/dim;
+}
+/* carte d'un objectif de budget : jauge dépensé / budget + repère « rythme du mois » (€ · R$) */
+function budgetCard(b,ym){
+  const budEur=toEUR(b.montant,b.cur),spent=budgetSpent(b,ym);
+  const pct=budEur>0?Math.round(spent/budEur*100):0;
+  const reste=budEur-spent,linked=(b.cats||[]).length>0;
+  const elapsed=monthElapsedFrac(ym);
+  let col,hint;
+  if(!linked){col="var(--ink-faint)";hint="Touchez pour associer des catégories";}
+  else if(pct>=100){col="var(--red)";hint="⚠️ Budget dépassé";}
+  else if(pct>elapsed*100+8){col="var(--amber)";hint="⚠️ Ralentis — en avance sur le rythme";}
+  else{col="var(--green)";hint="✓ Bon rythme";}
+  return `<div class="goal" data-bud="${b.id}">
+    <div class="goal-top">
+      <div class="goal-ico" style="background:${b.cor||'#3b82f6'}">${b.icone||"📌"}</div>
+      <div style="flex:1;min-width:0"><div class="gnm">${esc(b.nom)}</div><div class="gmeta">${dualEUR(spent)} / ${dualEUR(budEur)}</div></div>
+      <div class="gpct" style="color:${col}">${pct}%</div>
+    </div>
+    <div class="bgauge"><i style="width:${Math.min(100,pct)}%;background:${col}"></i>${linked?`<div class="mark" style="left:${Math.round(Math.min(100,elapsed*100))}%" title="rythme du mois"></div>`:""}</div>
+    <div class="goal-foot"><span style="color:${col}">${hint}</span><span>${reste>=0?"reste "+dualEUR(reste):"dépassé de "+dualEUR(-reste)}</span></div>
+  </div>`;
 }
 
 /* =====================================================================
@@ -888,13 +982,10 @@ function wireCatPick(sb,wrapId){
   if(newBtn)newBtn.onclick=()=>{const open=wrap.style.display==="none";wrap.style.display=open?"flex":"none";if(open&&inp)inp.focus();};
   const createCat=()=>{
     const nom=(inp.value||"").trim();if(!nom){toast("Renseignez un nom de catégorie","amber");return;}
-    // une catégorie du même nom existe déjà ? on la réutilise (évite deux « Sport » avec des ids différents)
-    const ex=state.categories.find(c=>c.type===draft.type&&c.nom.trim().toLowerCase()===nom.toLowerCase());
-    const nc=ex||{id:uid(),nom,cor:PALETTE[state.categories.length%PALETTE.length],icone:draft.type==="revenu"?"💰":"📦",type:draft.type};
-    if(!ex)state.categories.push(nc);
-    draft.categorie=nc.id;mark();
+    const nc={id:uid(),nom,cor:PALETTE[state.categories.length%PALETTE.length],icone:draft.type==="revenu"?"💰":"📦",type:draft.type};
+    state.categories.push(nc);draft.categorie=nc.id;mark();
     document.getElementById(wrapId).innerHTML=catPickHtml(draft.type);wireCatPick(sb,wrapId);
-    toast(ex?"Catégorie « "+nc.nom+" » sélectionnée ✓":"Catégorie « "+nom+" » créée ✓","green");
+    toast("Catégorie « "+nom+" » créée ✓","green");
   };
   if(saveCat)saveCat.onclick=createCat;
   if(inp)inp.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();createCat();}};
@@ -903,7 +994,7 @@ function formTx(existing,presetType){
   const isEdit=!!existing;
   draft=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),type:presetType||"depense",date:todayYmd(),montant:"",cur:"BRL",categorie:"",note:"",_rec:false};
   if(!draft.cur)draft.cur="BRL";
-  // pas de catégorie pré-cochée : le choix doit être explicite (sinon tout tombe en silence dans la 1re catégorie)
+  if(!draft.categorie){const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"";}
   const advOpen=isEdit&&((draft.qte&&Number(draft.qte)!==1)||(draft.montants&&draft.montants.length));
   const body=`
     <div class="fld"><label>Titre</label><input id="tNote" value="${esc(draft.note||"")}" placeholder="Ex : Courses, Loyer, Salaire…"></div>
@@ -932,15 +1023,17 @@ function formTx(existing,presetType){
         <button data-r="1" class="${draft._rec?"on":""}">Tous les mois<small>récurrent</small></button>
       </div></div>`}`;
   let foot=`<button class="btn btn-primary" id="tSave">${isEdit?"Enregistrer":"Ajouter"}</button>`;
-  if(isEdit)foot+=`<button class="btn btn-danger" id="tDel" style="margin-top:8px">Supprimer</button>`;
+  if(isEdit){
+    if(draft.recId)foot+=`<div class="btn-row" style="margin-top:8px"><button class="btn btn-ghost" id="tDelOne">Supprimer cette fois-ci</button><button class="btn btn-danger" id="tDelRec">Supprimer la récurrente</button></div>`;
+    else foot+=`<button class="btn btn-danger" id="tDel" style="margin-top:8px">Supprimer</button>`;
+  }
   openSheet(isEdit?"Modifier le mouvement":"Nouveau mouvement",body,foot);
   const sb=document.getElementById("sheetBody");
   const wireCats=()=>wireCatPick(sb,"tCatWrap");
   wireCats();
   sb.querySelectorAll("#tType [data-t]").forEach(b=>b.onclick=()=>{
     draft.type=b.dataset.t;sb.querySelectorAll("#tType [data-t]").forEach(x=>x.classList.toggle("on",x.dataset.t===draft.type));
-    // on retrouve la catégorie d'origine si on revient au type initial ; sinon le choix redevient explicite
-    draft.categorie=(existing&&existing.type===draft.type)?existing.categorie:"";
+    const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"";
     document.getElementById("tCatWrap").innerHTML=catPickHtml(draft.type);wireCats();
   });
   sb.querySelectorAll("#tFreq [data-r]").forEach(b=>b.onclick=()=>{draft._rec=b.dataset.r==="1";sb.querySelectorAll("#tFreq [data-r]").forEach(x=>x.classList.toggle("on",x.dataset.r===b.dataset.r));});
@@ -968,22 +1061,35 @@ function formTx(existing,presetType){
     draft.date=document.getElementById("tDate").value;
     draft.note=document.getElementById("tNote").value.trim();
     if(!draft.date||!draft.montant){toast("Renseignez le montant et la date","amber");return;}
-    if(!draft.categorie){toast("Choisissez une catégorie","amber");return;}
+    if(!draft.categorie){const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"autres";}
     if(!isEdit&&draft._rec){
       // saisie classée « récurrent » → on crée une charge/recette récurrente
       const rec={id:uid(),type:draft.type,montant:draft.montant,cur:draft.cur,categorie:draft.categorie,note:draft.note,jour:Math.min(28,parseYmd(draft.date).getDate()),actif:true,desde:draft.date.slice(0,7)};
       state.recurrences.push(rec);topUpRecurrences();mark();closeSheet();ui.finMonth=draft.date.slice(0,7);render();toast("Récurrente créée ✓","green");return;
     }
-    delete draft._rec;
-    // un mouvement issu d'une récurrente reste lié à elle (sinon topUpRecurrences le régénérerait en double) ;
-    // on le marque « édité » pour que la modification de la récurrente ne l'écrase pas
-    if(draft.recId){draft.edited=true;if(!draft.recYm)draft.recYm=((existing&&existing.date)||draft.date).slice(0,7);}
+    delete draft._rec;delete draft.recId; // un mouvement édité à la main se détache de sa récurrence
     const idx=state.tx.findIndex(t=>t.id===draft.id);
     if(idx>=0)state.tx[idx]=draft;else state.tx.push(draft);
     mark();closeSheet();ui.finMonth=draft.date.slice(0,7);render();toast(isEdit?"Mouvement enregistré ✓":"Mouvement ajouté ✓","green");
   };
   const del=document.getElementById("tDel");
   if(del)del.onclick=()=>{if(!confirm("Supprimer ce mouvement ?"))return;state.tx=state.tx.filter(t=>t.id!==draft.id);mark();closeSheet();render();toast("Mouvement supprimé");};
+  // mouvement issu d'une récurrente : supprimer juste cette occurrence (sans régénération) ou toute la récurrente
+  const delOne=document.getElementById("tDelOne");
+  if(delOne)delOne.onclick=()=>{
+    if(!confirm("Supprimer cette dépense pour ce mois-ci ? Elle ne reviendra pas ce mois mais la récurrente continue les autres mois."))return;
+    const rec=state.recurrences.find(r=>r.id===draft.recId),ym=(draft.date||"").slice(0,7);
+    if(rec&&ym){rec.skip=rec.skip||[];if(!rec.skip.includes(ym))rec.skip.push(ym);}
+    state.tx=state.tx.filter(t=>t.id!==draft.id);
+    mark();closeSheet();render();toast("Supprimée pour ce mois ✓");
+  };
+  const delRec=document.getElementById("tDelRec");
+  if(delRec)delRec.onclick=()=>{
+    if(!confirm("Supprimer toute la récurrente ? Toutes ses occurrences (passées et futures) seront retirées et elle ne reviendra plus."))return;
+    state.recurrences=state.recurrences.filter(r=>r.id!==draft.recId);
+    state.tx=state.tx.filter(t=>t.recId!==draft.recId);
+    mark();closeSheet();render();toast("Récurrente supprimée ✓");
+  };
 }
 
 function formObjectif(existing){
@@ -1024,6 +1130,48 @@ function formObjectif(existing){
   if(del)del.onclick=()=>{if(!confirm("Supprimer cet objectif ?"))return;state.objectifs=state.objectifs.filter(o=>o.id!==draft.id);mark();closeSheet();render();toast("Objectif supprimé");};
 }
 
+/* ---------- Objectif de budget (enveloppe mensuelle modifiable) ---------- */
+function formBudget(existing){
+  const isEdit=!!existing;
+  draft=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),nom:"",montant:"",cur:"EUR",icone:"📌",cor:PALETTE[1],detail:"",cats:[]};
+  if(!Array.isArray(draft.cats))draft.cats=[];
+  const body=`
+    <div class="fld"><label>Poste de budget</label><input id="bNom" value="${esc(draft.nom)}" placeholder="Ex : Courses, Sorties…"></div>
+    <div class="frow">
+      <div class="fld" style="flex:1.5"><label>Montant mensuel</label><input id="bMontant" inputmode="decimal" value="${draft.montant||""}" placeholder="100"></div>
+      <div class="fld" style="flex:1"><label>Devise</label><select id="bCur"><option value="EUR" ${draft.cur!=="BRL"?"selected":""}>€ Euro</option><option value="BRL" ${draft.cur==="BRL"?"selected":""}>R$ Réal</option></select></div>
+    </div>
+    <div class="fld"><label>Détail <span class="opt">(optionnel)</span></label><input id="bDetail" value="${esc(draft.detail||"")}" placeholder="Ex : loyer 525, Adobe 59…"></div>
+    <div class="fld"><label>Catégories suivies <span class="opt">(pour la jauge dépensé / budget)</span></label>
+      <div class="cat-pick" id="bCats">${state.categories.filter(c=>c.type==="depense").map(c=>`<button type="button" data-c="${c.id}" class="${draft.cats.includes(c.id)?"on":""}">${c.icone} ${esc(c.nom)}</button>`).join("")}</div></div>
+    <div class="fld"><label>Icône</label><div class="ico-pick" id="bIco">${BUDGET_ICONES.map(ic=>`<button data-i="${ic}" class="${draft.icone===ic?"on":""}">${ic}</button>`).join("")}</div></div>
+    <div class="fld"><label>Couleur</label><div class="color-pick" id="bCor">${PALETTE.map(c=>`<div class="sw ${draft.cor===c?"on":""}" data-c="${c}" style="background:${c}"></div>`).join("")}</div></div>`;
+  let foot=`<button class="btn btn-primary" id="bSave">${isEdit?"Enregistrer":"Créer le budget"}</button>`;
+  if(isEdit)foot+=`<div class="btn-row" style="margin-top:8px"><button class="btn btn-danger" id="bDel">Supprimer</button></div>`;
+  openSheet(isEdit?"Modifier le budget":"Nouvel objectif de budget",body,foot);
+  const sb=document.getElementById("sheetBody");
+  sb.querySelectorAll("#bCats [data-c]").forEach(btn=>btn.onclick=()=>{
+    const id=btn.dataset.c,i=draft.cats.indexOf(id);
+    if(i>=0)draft.cats.splice(i,1);else draft.cats.push(id);
+    btn.classList.toggle("on",draft.cats.includes(id));
+  });
+  sb.querySelectorAll("#bIco [data-i]").forEach(b=>b.onclick=()=>{draft.icone=b.dataset.i;sb.querySelectorAll("#bIco [data-i]").forEach(x=>x.classList.toggle("on",x.dataset.i===draft.icone));});
+  sb.querySelectorAll("#bCor [data-c]").forEach(b=>b.onclick=()=>{draft.cor=b.dataset.c;sb.querySelectorAll("#bCor .sw").forEach(x=>x.classList.toggle("on",x.dataset.c===draft.cor));});
+  document.getElementById("bSave").onclick=()=>{
+    draft.nom=document.getElementById("bNom").value.trim();
+    draft.montant=parseFloat(String(document.getElementById("bMontant").value).replace(",","."))||0;
+    draft.cur=document.getElementById("bCur").value;
+    draft.detail=document.getElementById("bDetail").value.trim();
+    if(!draft.nom||!draft.montant){toast("Renseignez un poste et un montant","amber");return;}
+    if(!state.budgets)state.budgets=[];
+    const idx=state.budgets.findIndex(b=>b.id===draft.id);
+    if(idx>=0)state.budgets[idx]=draft;else state.budgets.push(draft);
+    mark();closeSheet();setTab("objectifs");render();toast(isEdit?"Budget enregistré ✓":"Budget créé ✓","green");
+  };
+  const del=document.getElementById("bDel");
+  if(del)del.onclick=()=>{if(!confirm("Supprimer ce budget ?"))return;state.budgets=state.budgets.filter(b=>b.id!==draft.id);mark();closeSheet();render();toast("Budget supprimé");};
+}
+
 /* ---------- Récurrentes ---------- */
 function openRecurrences(){
   const recs=state.recurrences||[];
@@ -1045,7 +1193,7 @@ function formRecurrence(existing){
   const isEdit=!!existing;
   draft=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),type:"depense",montant:"",cur:"BRL",categorie:"",note:"",jour:1,actif:true,desde:ymNow()};
   if(!draft.cur)draft.cur="BRL";
-  // pas de catégorie pré-cochée : le choix doit être explicite
+  if(!draft.categorie){const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"";}
   const body=`
     <div class="fld"><label>Type</label>
       <div class="choice" id="rType">
@@ -1071,7 +1219,7 @@ function formRecurrence(existing){
   wireCats();
   sb.querySelectorAll("#rType [data-t]").forEach(b=>b.onclick=()=>{
     draft.type=b.dataset.t;sb.querySelectorAll("#rType [data-t]").forEach(x=>x.classList.toggle("on",x.dataset.t===draft.type));
-    draft.categorie=(existing&&existing.type===draft.type)?existing.categorie:"";
+    const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"";
     document.getElementById("rCatWrap").innerHTML=catPickHtml(draft.type);wireCats();
   });
   document.getElementById("rSave").onclick=()=>{
@@ -1082,24 +1230,22 @@ function formRecurrence(existing){
     draft.desde=document.getElementById("rDesde").value||ymNow();
     draft.fin=document.getElementById("rFin").value||"";
     if(!draft.montant){toast("Renseignez un montant","amber");return;}
-    if(!draft.categorie){toast("Choisissez une catégorie","amber");return;}
+    if(!draft.categorie){const first=state.categories.find(c=>c.type===draft.type);draft.categorie=first?first.id:"autres";}
     const idx=state.recurrences.findIndex(r=>r.id===draft.id);
     if(idx>=0){
-      // si on modifie une récurrente, on ne régénère que le mois courant et les mois à venir :
-      // l'historique passé (ce qui a réellement été payé) et les occurrences éditées à la main restent intacts
+      // si on modifie une récurrente, on resynchronise les transactions futures non éditées
       state.recurrences[idx]=draft;
-      const cutoff=ymNow();
-      state.tx=state.tx.filter(t=>!(t.recId===draft.id&&!t.edited&&(t.recYm||(t.date||"").slice(0,7))>=cutoff));
+      state.tx=state.tx.filter(t=>t.recId!==draft.id); // on régénère proprement
     }else state.recurrences.push(draft);
     topUpRecurrences();mark();closeSheet();render();toast(isEdit?"Récurrente enregistrée ✓":"Récurrente créée ✓","green");
   };
   const del=document.getElementById("rDel");
   if(del)del.onclick=()=>{
-    if(!confirm("Supprimer cette récurrente ? Les mouvements passés sont conservés, les prévisions futures supprimées."))return;
+    if(!confirm("Supprimer cette récurrente ? Les mouvements passés sont conservés, les mois à venir sont retirés et elle ne reviendra plus."))return;
+    const cur=ymNow();
     state.recurrences=state.recurrences.filter(r=>r.id!==draft.id);
-    const today=todayYmd();
-    state.tx=state.tx.filter(t=>!(t.recId===draft.id&&(t.date||"")>today)); // purge le prévisionnel
-    state.tx.forEach(t=>{if(t.recId===draft.id)delete t.recId;});
+    state.tx=state.tx.filter(t=>!(t.recId===draft.id&&(t.date||"").slice(0,7)>cur)); // retire les occurrences futures
+    state.tx.forEach(t=>{if(t.recId===draft.id)delete t.recId;});                    // détache le passé (conservé en historique)
     mark();closeSheet();render();toast("Récurrente supprimée");
   };
 }
@@ -1145,15 +1291,8 @@ function formCategorie(existing){
   const del=document.getElementById("cDel");
   if(del)del.onclick=()=>{
     const used=state.tx.filter(t=>t.categorie===draft.id).length+state.recurrences.filter(r=>r.categorie===draft.id).length;
-    const msg=used?`Cette catégorie est utilisée par ${used} mouvement(s)/récurrente(s). Ils seront reclassés en « Autres ». Supprimer quand même ?`:"Supprimer cette catégorie ?";
+    const msg=used?`Cette catégorie est utilisée par ${used} mouvement(s)/récurrente(s). Ils resteront mais s'afficheront en « Autres ». Supprimer quand même ?`:"Supprimer cette catégorie ?";
     if(!confirm(msg))return;
-    // reclasse réellement les mouvements/récurrentes vers la catégorie fourre-tout (sinon chaque id orphelin
-    // devient une ligne « Autres » distincte dans les graphiques)
-    const fallback=draft.type==="revenu"?"autres_rev":"autres";
-    if(state.categories.some(c=>c.id===fallback&&c.id!==draft.id)){
-      state.tx.forEach(t=>{if(t.categorie===draft.id)t.categorie=fallback;});
-      state.recurrences.forEach(r=>{if(r.categorie===draft.id)r.categorie=fallback;});
-    }
     state.categories=state.categories.filter(c=>c.id!==draft.id);mark();closeSheet();openCategories();render();toast("Catégorie supprimée");
   };
 }
