@@ -896,6 +896,17 @@ function renderObjectifs(){
   const totCol=totPct>=100?"var(--red)":(varPct>elapsed*100+8?"var(--amber)":"var(--green)");
   const allDep=statsMois(bym).depenses;            // total dépenses du mois (toutes catégories — cohérent avec l'accueil)
   const hors=Math.max(0,allDep-totSpent);          // dépenses hors postes budgétés (impôts, autres…)
+  // détail du « hors budgets » par catégorie, pour qu'on voie d'où vient le montant
+  const trackedCats=new Set(buds.filter(b=>!b.rec).flatMap(b=>b.cats||[]));
+  const hasRecBud=buds.some(b=>b.rec);
+  const horsByCat={};
+  txMois(bym).forEach(t=>{
+    if(t.type!=="depense")return;
+    const suivi=t.recId?hasRecBud:trackedCats.has(t.categorie);
+    if(!suivi)horsByCat[t.categorie]=(horsByCat[t.categorie]||0)+toEUR(t.montant,t.cur);
+  });
+  const horsHtml=Object.keys(horsByCat).sort((a,b)=>horsByCat[b]-horsByCat[a]).map(id=>{const ct=cat(id);
+    return `<div class="info-line" style="border:none;padding:2px 0 2px 14px"><span class="k" style="font-size:12.5px">${ct.icone} ${esc(ct.nom)}</span><span class="v" style="font-size:12.5px;color:var(--ink-faint)">${dualEUR(horsByCat[id])}</span></div>`;}).join("");
   html+=`<div class="section-title">Objectifs de budget <span class="count">${buds.length}</span></div>`;
   if(buds.length){
     html+=`<div class="card" style="padding:14px 16px 8px;margin-bottom:11px">
@@ -903,7 +914,8 @@ function renderObjectifs(){
       <div class="bgauge"><i style="width:${Math.min(100,totPct)}%;background:${totCol}"></i><div class="mark" style="left:${Math.round(Math.min(100,elapsed*100))}%" title="rythme du mois (jour ${new Date().getDate()})"></div></div>
       <div class="goal-foot"><span style="color:${totCol}">${totPct}% du budget · ${Math.round(elapsed*100)}% du mois écoulé</span><span>${dualEUR(totBud-totSpent>=0?totBud-totSpent:0)} restant</span></div>
       <div class="info-line" style="margin-top:10px"><span class="k">Dépensé sur postes suivis</span><span class="v">${dualEUR(totSpent)}</span></div>
-      <div class="info-line"><span class="k">Hors budgets (impôts, autres…)</span><span class="v">${dualEUR(hors)}</span></div>
+      <div class="info-line"><span class="k">Hors budgets</span><span class="v">${dualEUR(hors)}</span></div>
+      ${horsHtml}
       <div class="info-line"><span class="k" style="font-weight:800;color:var(--ink)">Total dépenses du mois</span><span class="v" style="font-weight:800">${dualEUR(allDep)}</span></div>
     </div>`;
     html+=buds.map(b=>budgetCard(b,bym)).join("");
